@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>MCP Hub</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --panel-2: #21252e;
+    --border: #2a2f3a;
+    --text: #e7e9ee;
+    --muted: #8b93a3;
+    --accent: #4ea1ff;
+    --good: #3ecf8e;
+    --bad: #ff6b6b;
+    --warn: #f5a524;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fafbfc;
+      --panel: #ffffff;
+      --panel-2: #f3f5f8;
+      --border: #e2e6ed;
+      --text: #1a1d24;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --good: #16a34a;
+      --bad: #dc2626;
+      --warn: #d97706;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--panel);
+  }
+  header h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+  button {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { background: var(--panel-2); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  button.primary:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card-head {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    margin-bottom: 8px;
+  }
+  .name { font-weight: 600; font-size: 15px; }
+  .status {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--panel-2); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .status.running { background: rgba(62, 207, 142, 0.18); color: var(--good); }
+  .status.starting, .status.stopping { background: rgba(245, 165, 36, 0.18); color: var(--warn); }
+  .status.error { background: rgba(255, 107, 107, 0.18); color: var(--bad); }
+  .status.stopped { background: var(--panel-2); color: var(--muted); }
+  .cmd {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px;
+    color: var(--muted); word-break: break-all; margin-bottom: 8px;
+  }
+  .stats { display: flex; gap: 14px; margin: 8px 0; flex-wrap: wrap; }
+  .stat { font-size: 12px; }
+  .stat .v { font-weight: 600; color: var(--text); }
+  .stat .l { color: var(--muted); }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+  .url-row {
+    display: flex; gap: 6px; align-items: center;
+    background: var(--panel-2); border-radius: 6px; padding: 6px 10px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px;
+  }
+  .url-row code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url-row button { padding: 2px 8px; font-size: 11px; }
+  .err {
+    background: rgba(255, 107, 107, 0.08); border: 1px solid rgba(255, 107, 107, 0.3);
+    border-radius: 6px; padding: 8px 10px; margin-top: 8px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 11px;
+    color: var(--bad); white-space: pre-wrap; word-break: break-word;
+  }
+  /* toggle */
+  .switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; transition: 0.15s;
+  }
+  .slider::before {
+    content: ""; position: absolute; height: 16px; width: 16px;
+    left: 2px; bottom: 2px; background: var(--muted);
+    border-radius: 50%; transition: 0.15s;
+  }
+  input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  input:checked + .slider::before { transform: translateX(16px); background: white; }
+  .empty {
+    text-align: center; color: var(--muted); padding: 60px 20px;
+    border: 1px dashed var(--border); border-radius: 8px;
+  }
+  .empty code { background: var(--panel); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  .toast {
+    position: fixed; right: 16px; bottom: 16px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 14px; font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    opacity: 0; transform: translateY(8px); transition: 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.bad { border-color: var(--bad); color: var(--bad); }
+  .json-panel {
+    margin: 0 0 16px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden;
+  }
+  .json-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    background: var(--panel-2); font-size: 13px;
+  }
+  .json-actions { display: flex; gap: 6px; }
+  .json-actions button { padding: 3px 10px; font-size: 12px; }
+  .json-panel pre {
+    margin: 0; padding: 12px 14px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px;
+    color: var(--text); background: var(--panel);
+    overflow: auto; max-height: 360px; white-space: pre;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>MCP Hub</h1>
+  <span class="meta" id="meta"></span>
+</header>
+<main>
+  <div class="toolbar">
+    <button class="primary" onclick="reloadConfig()" title="Re-read config.json from disk and apply changes">Reload config</button>
+    <button onclick="showMcpJson()" title="Show a .mcp.json pointing each enabled server at this hub">Show mcp.json</button>
+    <span class="meta" id="config-path"></span>
+  </div>
+  <div id="mcp-json-panel" class="json-panel" hidden>
+    <div class="json-head">
+      <span>mcp.json (enabled servers only)</span>
+      <span class="json-actions">
+        <button onclick="copyMcpJson()">Copy</button>
+        <button onclick="downloadMcpJson()">Download</button>
+        <button onclick="hideMcpJson()">Close</button>
+      </span>
+    </div>
+    <pre id="mcp-json-body"></pre>
+  </div>
+  <div id="content"></div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (s) => s == null ? "" : String(s);
+
+let toastTimer = null;
+function toast(msg, bad=false) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.toggle("bad", bad);
+  el.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+async function api(path, opts={}) {
+  const r = await fetch(path, { headers: { "content-type": "application/json" }, ...opts });
+  const text = await r.text();
+  let data; try { data = JSON.parse(text); } catch { data = { _raw: text }; }
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
+function statusBadge(s) {
+  return `<span class="status ${s}">${s}</span>`;
+}
+
+function renderCard(s) {
+  const argline = [s.command, ...(s.args || [])].join(" ");
+  const url = `${location.origin}${s.mcp_url}`;
+  const caps = Object.entries(s.capabilities || {})
+    .filter(([, v]) => v).map(([k]) => k).join(", ") || "—";
+  return `
+    <div class="card" data-name="${s.name}">
+      <div class="card-head">
+        <span class="name">${s.name}</span>
+        <span style="display:flex; gap:8px; align-items:center;">
+          ${statusBadge(s.status)}
+          <label class="switch" title="Enable / disable">
+            <input type="checkbox" ${s.enabled ? "checked" : ""}
+              onchange="toggleServer('${s.name}', this.checked)" />
+            <span class="slider"></span>
+          </label>
+        </span>
+      </div>
+      <div class="cmd">${argline}</div>
+      <div class="stats">
+        <span class="stat"><span class="v">${s.tool_count}</span> <span class="l">tools</span></span>
+        <span class="stat"><span class="v">${s.prompt_count}</span> <span class="l">prompts</span></span>
+        <span class="stat"><span class="v">${s.resource_count}</span> <span class="l">resources</span></span>
+        <span class="stat"><span class="l">caps:</span> <span class="v">${caps}</span></span>
+      </div>
+      ${s.server_info ? `<div class="stat"><span class="l">upstream:</span> <span class="v">${s.server_info.name} ${s.server_info.version || ""}</span></div>` : ""}
+      <div class="url-row" title="Streamable HTTP endpoint">
+        <code>${url}</code>
+        <button onclick="copyText('${url}')">Copy</button>
+      </div>
+      ${s.error ? `<div class="err">${escapeHtml(s.error)}</div>` : ""}
+      <div class="row">
+        <span class="meta" style="font-size: 12px; color: var(--muted);">
+          ${s.cwd ? `cwd: ${s.cwd}` : ""}
+        </span>
+        <button onclick="restartServer('${s.name}')" ${s.enabled ? "" : "disabled"}>Restart</button>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); toast("Copied"); }
+  catch { toast("Copy failed", true); }
+}
+
+async function refresh() {
+  try {
+    const data = await api("/api/servers");
+    const c = $("content");
+    if (!data.servers.length) {
+      c.innerHTML = `
+        <div class="empty">
+          No servers in config.<br><br>
+          Edit <code id="cfgpath2"></code> and add an entry under <code>mcpServers</code>, then click <b>Reload config</b>.
+        </div>`;
+      const cfg = await api("/api/config");
+      $("config-path").textContent = cfg.path;
+      const cp2 = document.getElementById("cfgpath2"); if (cp2) cp2.textContent = cfg.path;
+      return;
+    }
+    c.innerHTML = `<div class="grid">${data.servers.map(renderCard).join("")}</div>`;
+    const cfg = await api("/api/config");
+    $("config-path").textContent = cfg.path;
+  } catch (e) { toast(e.message, true); }
+}
+
+async function toggleServer(name, enabled) {
+  try {
+    await api(`/api/servers/${encodeURIComponent(name)}/toggle`, {
+      method: "POST", body: JSON.stringify({ enabled }),
+    });
+    toast(enabled ? `${name}: enabled` : `${name}: disabled`);
+    await refresh();
+  } catch (e) { toast(e.message, true); await refresh(); }
+}
+
+async function restartServer(name) {
+  try {
+    await api(`/api/servers/${encodeURIComponent(name)}/restart`, { method: "POST" });
+    toast(`${name}: restarted`);
+    await refresh();
+  } catch (e) { toast(e.message, true); await refresh(); }
+}
+
+async function reloadConfig() {
+  try {
+    await api("/api/reload", { method: "POST" });
+    toast("Config reloaded");
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function showMcpJson() {
+  try {
+    const r = await fetch("/api/export-mcp-json");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const text = await r.text();
+    $("mcp-json-body").textContent = text;
+    $("mcp-json-panel").hidden = false;
+    $("mcp-json-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (e) { toast(e.message, true); }
+}
+
+function hideMcpJson() { $("mcp-json-panel").hidden = true; }
+
+async function copyMcpJson() {
+  try {
+    await navigator.clipboard.writeText($("mcp-json-body").textContent);
+    toast("Copied mcp.json");
+  } catch { toast("Copy failed", true); }
+}
+
+function downloadMcpJson() {
+  const blob = new Blob([$("mcp-json-body").textContent], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "mcp.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+refresh();
+setInterval(refresh, 5000);
+$("meta").textContent = location.host;
+</script>
+</body>
+</html>
