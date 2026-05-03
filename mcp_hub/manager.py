@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from mcp import ClientSession
+from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
 from .config import ServerConfig
@@ -77,15 +79,29 @@ class RuntimeServer:
     async def _run(self) -> None:
         try:
             async with AsyncExitStack() as stack:
-                merged_env = {**os.environ, **(self.cfg.env or {})}
-                params = StdioServerParameters(
-                    command=self.cfg.command,
-                    args=list(self.cfg.args),
-                    env=merged_env,
-                    cwd=self.cfg.cwd,
-                )
-                logger.info("[%s] starting upstream: %s %s", self.name, params.command, " ".join(params.args))
-                read, write = await stack.enter_async_context(stdio_client(params))
+                if self.cfg.type == "stdio":
+                    merged_env = {**os.environ, **(self.cfg.env or {})}
+                    params = StdioServerParameters(
+                        command=self.cfg.command,
+                        args=list(self.cfg.args),
+                        env=merged_env,
+                        cwd=self.cfg.cwd,
+                    )
+                    logger.info("[%s] starting upstream stdio: %s %s", self.name, params.command, " ".join(params.args))
+                    read, write = await stack.enter_async_context(stdio_client(params))
+                elif self.cfg.type == "http":
+                    logger.info("[%s] connecting upstream http: %s", self.name, self.cfg.url)
+                    streams = await stack.enter_async_context(
+                        streamablehttp_client(self.cfg.url, headers=self.cfg.headers or None)
+                    )
+                    read, write = streams[0], streams[1]
+                elif self.cfg.type == "sse":
+                    logger.info("[%s] connecting upstream sse: %s", self.name, self.cfg.url)
+                    read, write = await stack.enter_async_context(
+                        sse_client(self.cfg.url, headers=self.cfg.headers or None)
+                    )
+                else:
+                    raise ValueError(f"unsupported server type: {self.cfg.type!r}")
                 session = await stack.enter_async_context(ClientSession(read, write))
                 init_result = await session.initialize()
 
@@ -244,8 +260,11 @@ class HubManager:
 
 def _config_changed(a: ServerConfig, b: ServerConfig) -> bool:
     return (
-        a.command != b.command
+        a.type != b.type
+        or a.command != b.command
         or list(a.args) != list(b.args)
         or dict(a.env) != dict(b.env)
         or a.cwd != b.cwd
+        or a.url != b.url
+        or dict(a.headers) != dict(b.headers)
     )

@@ -25,11 +25,16 @@ uv pip install --system mcp starlette uvicorn
 ## Run
 
 ```powershell
-# Windows convenience launcher (creates config.json from example on first run):
+# Windows:
 .\run.bat
+```
 
-# Or directly:
-python -m mcp_hub --config .\config.json
+```bash
+# Linux / macOS:
+chmod +x run.sh && ./run.sh
+
+# Or directly (any platform):
+python -m mcp_hub --config ./config.json
 ```
 
 Open <http://127.0.0.1:3737> in a browser.

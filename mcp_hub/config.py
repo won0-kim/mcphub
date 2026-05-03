@@ -8,30 +8,57 @@ from pathlib import Path
 
 @dataclass
 class ServerConfig:
-    command: str
+    # Either a stdio process (command/args/env/cwd) or a remote endpoint (url/headers).
+    type: str = "stdio"  # "stdio" | "http" | "sse"
+    command: str = ""
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
     cwd: str | None = None
+    url: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
     enabled: bool = False
 
     def to_json(self) -> dict:
-        out: dict = {"command": self.command}
-        if self.args:
-            out["args"] = list(self.args)
-        if self.env:
-            out["env"] = dict(self.env)
-        if self.cwd:
-            out["cwd"] = self.cwd
+        out: dict = {}
+        if self.type == "stdio":
+            # Omit "type": stdio is implied by presence of "command".
+            out["command"] = self.command
+            if self.args:
+                out["args"] = list(self.args)
+            if self.env:
+                out["env"] = dict(self.env)
+            if self.cwd:
+                out["cwd"] = self.cwd
+        else:
+            out["type"] = self.type
+            out["url"] = self.url
+            if self.headers:
+                out["headers"] = dict(self.headers)
         out["enabled"] = self.enabled
         return out
 
     @classmethod
     def from_json(cls, data: dict) -> "ServerConfig":
+        # Type inference: explicit "type" wins; otherwise "url" → http, "command" → stdio.
+        explicit = (data.get("type") or "").lower()
+        if explicit in ("http", "streamable-http", "streamable_http"):
+            kind = "http"
+        elif explicit == "sse":
+            kind = "sse"
+        elif explicit == "stdio":
+            kind = "stdio"
+        elif data.get("url"):
+            kind = "http"
+        else:
+            kind = "stdio"
         return cls(
-            command=data["command"],
+            type=kind,
+            command=data.get("command", "") or "",
             args=list(data.get("args", []) or []),
             env=dict(data.get("env", {}) or {}),
             cwd=data.get("cwd"),
+            url=data.get("url", "") or "",
+            headers=dict(data.get("headers", {}) or {}),
             enabled=bool(data.get("enabled", False)),
         )
 

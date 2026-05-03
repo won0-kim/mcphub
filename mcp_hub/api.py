@@ -19,10 +19,12 @@ logger = logging.getLogger(__name__)
 def _server_to_dict(rt: RuntimeServer) -> dict:
     return {
         "name": rt.name,
+        "type": rt.cfg.type,
         "command": rt.cfg.command,
         "args": list(rt.cfg.args),
         "env_keys": sorted(rt.cfg.env.keys()),
         "cwd": rt.cfg.cwd,
+        "url": rt.cfg.url,
         "enabled": rt.cfg.enabled,
         "status": rt.status.status,
         "error": rt.status.error,

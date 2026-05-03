@@ -201,7 +201,9 @@ function statusBadge(s) {
 }
 
 function renderCard(s) {
-  const argline = [s.command, ...(s.args || [])].join(" ");
+  const sourceLine = s.type === "stdio"
+    ? [s.command, ...(s.args || [])].join(" ")
+    : `${s.type.toUpperCase()} → ${s.url}`;
   const url = `${location.origin}${s.mcp_url}`;
   const caps = Object.entries(s.capabilities || {})
     .filter(([, v]) => v).map(([k]) => k).join(", ") || "—";
@@ -218,7 +220,7 @@ function renderCard(s) {
           </label>
         </span>
       </div>
-      <div class="cmd">${argline}</div>
+      <div class="cmd">${escapeHtml(sourceLine)}</div>
       <div class="stats">
         <span class="stat"><span class="v">${s.tool_count}</span> <span class="l">tools</span></span>
         <span class="stat"><span class="v">${s.prompt_count}</span> <span class="l">prompts</span></span>
