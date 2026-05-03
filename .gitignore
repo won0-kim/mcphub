@@ -12,4 +12,6 @@ hub.err
 .idea/
 .vscode/
 config.json
+mcp/
 test/
+test_target.json*

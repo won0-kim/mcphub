@@ -39,26 +39,64 @@
     font-size: 14px; line-height: 1.5;
   }
   header {
-    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--panel);
+    background: var(--panel); flex-wrap: wrap; gap: 12px;
   }
   header h1 { font-size: 16px; font-weight: 600; margin: 0; }
   header .meta { color: var(--muted); font-size: 12px; }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
-  .toolbar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  .config-bar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  select, input[type=text], input[type=number], textarea {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 13px;
+    font-family: inherit;
+  }
+  textarea {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px;
+    width: 100%; min-height: 180px; resize: vertical;
+  }
   button {
     background: var(--panel); color: var(--text);
     border: 1px solid var(--border); border-radius: 6px;
     padding: 6px 12px; font-size: 13px; cursor: pointer;
+    font-family: inherit;
   }
   button:hover { background: var(--panel-2); }
   button.primary { background: var(--accent); border-color: var(--accent); color: white; }
   button.primary:hover { filter: brightness(1.1); }
+  button.danger { color: var(--bad); border-color: rgba(255,107,107,0.4); }
+  button.danger:hover { background: rgba(255,107,107,0.1); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.icon { padding: 4px 8px; font-size: 12px; }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+  .target-bar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 16px; padding: 8px 12px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12px;
+  }
+  .target-path {
+    display: inline-block; vertical-align: middle;
+    line-height: 18px; height: 24px;
+    background: var(--panel); padding: 3px 8px; border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    color: var(--text); max-width: 60ch; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .target-path.empty {
+    color: var(--muted); font-style: italic;
+    background: transparent; padding: 3px 0;
+  }
+
   .grid {
     display: grid; gap: 12px;
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   }
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
@@ -85,11 +123,11 @@
   .stat { font-size: 12px; }
   .stat .v { font-weight: 600; color: var(--text); }
   .stat .l { color: var(--muted); }
-  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
   .url-row {
     display: flex; gap: 6px; align-items: center;
     background: var(--panel-2); border-radius: 6px; padding: 6px 10px;
     font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px;
+    margin-top: 4px;
   }
   .url-row code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .url-row button { padding: 2px 8px; font-size: 11px; }
@@ -99,7 +137,9 @@
     font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 11px;
     color: var(--bad); white-space: pre-wrap; word-break: break-word;
   }
-  /* toggle */
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .actions { display: flex; gap: 6px; }
+
   .switch { position: relative; display: inline-block; width: 38px; height: 22px; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider {
@@ -114,21 +154,24 @@
   }
   input:checked + .slider { background: var(--accent); border-color: var(--accent); }
   input:checked + .slider::before { transform: translateX(16px); background: white; }
+
   .empty {
     text-align: center; color: var(--muted); padding: 60px 20px;
     border: 1px dashed var(--border); border-radius: 8px;
   }
   .empty code { background: var(--panel); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
   .toast {
     position: fixed; right: 16px; bottom: 16px;
     background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
     padding: 10px 14px; font-size: 13px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     opacity: 0; transform: translateY(8px); transition: 0.2s;
-    pointer-events: none;
+    pointer-events: none; max-width: 480px;
   }
   .toast.show { opacity: 1; transform: translateY(0); }
   .toast.bad { border-color: var(--bad); color: var(--bad); }
+
   .json-panel {
     margin: 0 0 16px;
     background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
@@ -147,36 +190,120 @@
     color: var(--text); background: var(--panel);
     overflow: auto; max-height: 360px; white-space: pre;
   }
+
+  /* Modal */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 60px 16px; z-index: 100; overflow-y: auto;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; max-width: 720px; width: 100%;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+  }
+  .modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+  }
+  .modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .modal-body { padding: 16px 18px; }
+  .modal-foot {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tab {
+    padding: 8px 14px; border: none; background: transparent; color: var(--muted);
+    cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block; font-size: 12px; color: var(--muted);
+    margin-bottom: 4px; font-weight: 500;
+  }
+  .field input[type=text], .field input[type=number], .field textarea, .field select {
+    width: 100%;
+  }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .preset-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+  .preset {
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; background: var(--panel);
+  }
+  .preset:hover { background: var(--panel-2); border-color: var(--accent); }
+  .preset .label { font-weight: 600; font-size: 13px; }
+  .preset .desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .radios { display: flex; gap: 14px; }
+  .radios label { display: flex; gap: 4px; align-items: center; font-size: 13px; }
+
+  .key-val { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
+  .key-val input { padding: 4px 8px; font-size: 12px; }
+
+  .pill {
+    display: inline-block; font-size: 10px; padding: 1px 6px;
+    border-radius: 999px; background: var(--panel-2); color: var(--muted);
+    margin-right: 4px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .pill.active { background: rgba(78, 161, 255, 0.18); color: var(--accent); }
 </style>
 </head>
 <body>
 <header>
   <h1>MCP Hub</h1>
-  <span class="meta" id="meta"></span>
+  <div class="config-bar">
+    <span class="meta">Config: </span>
+    <select id="file-picker" onchange="onPickFile(this.value)"></select>
+    <button class="icon" onclick="openNewFile()" title="Create a new mcp.json (paste/upload)">New</button>
+    <button class="icon" onclick="copyActiveFile()" title="Duplicate the active mcp.json under a new name">Copy</button>
+    <button class="icon" onclick="renameActiveFile()" title="Rename the active mcp.json">Rename</button>
+    <button class="icon danger" onclick="deleteActiveFile()" title="Delete this mcp.json" id="btn-delete-file">Delete</button>
+  </div>
+  <span class="meta" id="meta">
+    <code id="meta-base" title="Effective base URL used in generated mcp.json"></code>
+    <button class="icon" onclick="openSettings()" title="Hub public URL settings">⚙ Settings</button>
+  </span>
 </header>
 <main>
   <div class="toolbar">
-    <button class="primary" onclick="reloadConfig()" title="Re-read config.json from disk and apply changes">Reload config</button>
-    <button onclick="showMcpJson()" title="Show a .mcp.json pointing each enabled server at this hub">Show mcp.json</button>
-    <span class="meta" id="config-path"></span>
+    <button class="primary" onclick="reloadConfig()" title="Re-read the active mcp.json + enabled overlay from disk">Reload</button>
+    <button id="btn-mcp-json" onclick="toggleMcpJson()">Show mcp.json</button>
+    <button onclick="openAddServer()">+ Add server</button>
   </div>
+
+  <div class="target-bar">
+    <span class="meta">target mcp:</span>
+    <code id="target-display" class="target-path">(none)</code>
+    <button class="icon" onclick="setTarget()" title="Set / change the target path that this profile auto-syncs to">Set</button>
+    <span class="meta" id="target-hint"></span>
+  </div>
+
   <div id="mcp-json-panel" class="json-panel" hidden>
     <div class="json-head">
-      <span>mcp.json (enabled servers only)</span>
+      <span>mcp.json (enabled servers in active file, with hub URLs)</span>
       <span class="json-actions">
         <button onclick="copyMcpJson()">Copy</button>
         <button onclick="downloadMcpJson()">Download</button>
-        <button onclick="hideMcpJson()">Close</button>
       </span>
     </div>
     <pre id="mcp-json-body"></pre>
   </div>
+
   <div id="content"></div>
 </main>
+
 <div class="toast" id="toast"></div>
+
+<div id="overlay-host"></div>
+
 <script>
 const $ = (id) => document.getElementById(id);
-const fmt = (s) => s == null ? "" : String(s);
 
 let toastTimer = null;
 function toast(msg, bad=false) {
@@ -185,7 +312,7 @@ function toast(msg, bad=false) {
   el.classList.toggle("bad", bad);
   el.classList.add("show");
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 3500);
 }
 
 async function api(path, opts={}) {
@@ -196,26 +323,85 @@ async function api(path, opts={}) {
   return data;
 }
 
-function statusBadge(s) {
-  return `<span class="status ${s}">${s}</span>`;
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
 }
+
+let STATE = { active: null, servers: [], files: [], predefined: [] };
+
+async function refresh() {
+  try {
+    const [serversData, filesData] = await Promise.all([
+      api("/api/servers"),
+      api("/api/mcp-files"),
+    ]);
+    STATE.active = serversData.active;
+    STATE.servers = serversData.servers;
+    STATE.files = filesData.files;
+    STATE.activeTarget = filesData.active_target || "";
+    STATE.baseUrl = filesData.base_url || "";
+    STATE.publicUrl = filesData.public_url || "";
+    $("meta-base").textContent = STATE.baseUrl;
+    $("meta-base").title = STATE.publicUrl
+      ? "public URL set → used in generated mcp.json"
+      : "no public URL set → using request URL";
+    renderFilePicker();
+    renderTargetBar();
+    renderServers();
+    if (!$("mcp-json-panel").hidden) await loadMcpJson();
+  } catch (e) { toast(e.message, true); }
+}
+
+function renderTargetBar() {
+  const t = STATE.activeTarget;
+  const disp = $("target-display");
+  if (t) {
+    disp.textContent = t;
+    disp.classList.remove("empty");
+    $("target-hint").textContent = "auto-synced when servers/enabled change";
+  } else {
+    disp.textContent = "(none)";
+    disp.classList.add("empty");
+    $("target-hint").textContent = "click Load to import an existing mcp.json and keep it in sync";
+  }
+}
+
+function renderFilePicker() {
+  const sel = $("file-picker");
+  const current = STATE.active;
+  sel.innerHTML = STATE.files.map(c =>
+    `<option value="${escapeHtml(c.name)}" ${c.name === current ? "selected" : ""}>${escapeHtml(c.name)} (${c.enabled_count}/${c.server_count})</option>`
+  ).join("");
+}
+
+function renderServers() {
+  const c = $("content");
+  if (!STATE.servers.length) {
+    c.innerHTML = `<div class="empty">No servers in this config. Click <b>+ Add server</b> to add one.</div>`;
+    return;
+  }
+  c.innerHTML = `<div class="grid">${STATE.servers.map(renderCard).join("")}</div>`;
+}
+
+function statusBadge(s) { return `<span class="status ${s}">${s}</span>`; }
 
 function renderCard(s) {
   const sourceLine = s.type === "stdio"
     ? [s.command, ...(s.args || [])].join(" ")
     : `${s.type.toUpperCase()} → ${s.url}`;
-  const url = `${location.origin}${s.mcp_url}`;
-  const caps = Object.entries(s.capabilities || {})
-    .filter(([, v]) => v).map(([k]) => k).join(", ") || "—";
+  const url = s.mcp_url.startsWith("http") ? s.mcp_url : `${location.origin}${s.mcp_url}`;
+  const caps = Object.entries(s.capabilities || {}).filter(([, v]) => v).map(([k]) => k).join(", ") || "—";
   return `
-    <div class="card" data-name="${s.name}">
+    <div class="card" data-name="${escapeHtml(s.name)}">
       <div class="card-head">
-        <span class="name">${s.name}</span>
+        <span class="name">${escapeHtml(s.name)} <span class="pill">${s.type}</span></span>
         <span style="display:flex; gap:8px; align-items:center;">
           ${statusBadge(s.status)}
           <label class="switch" title="Enable / disable">
             <input type="checkbox" ${s.enabled ? "checked" : ""}
-              onchange="toggleServer('${s.name}', this.checked)" />
+              onchange="toggleServer('${escapeHtml(s.name)}', this.checked)" />
             <span class="slider"></span>
           </label>
         </span>
@@ -227,26 +413,22 @@ function renderCard(s) {
         <span class="stat"><span class="v">${s.resource_count}</span> <span class="l">resources</span></span>
         <span class="stat"><span class="l">caps:</span> <span class="v">${caps}</span></span>
       </div>
-      ${s.server_info ? `<div class="stat"><span class="l">upstream:</span> <span class="v">${s.server_info.name} ${s.server_info.version || ""}</span></div>` : ""}
-      <div class="url-row" title="Streamable HTTP endpoint">
-        <code>${url}</code>
-        <button onclick="copyText('${url}')">Copy</button>
+      ${s.server_info ? `<div class="stat"><span class="l">upstream:</span> <span class="v">${escapeHtml(s.server_info.name)} ${escapeHtml(s.server_info.version || "")}</span></div>` : ""}
+      <div class="url-row" title="Hub Streamable HTTP endpoint">
+        <code>${escapeHtml(url)}</code>
+        <button onclick="copyText('${escapeHtml(url)}')">Copy</button>
       </div>
       ${s.error ? `<div class="err">${escapeHtml(s.error)}</div>` : ""}
       <div class="row">
-        <span class="meta" style="font-size: 12px; color: var(--muted);">
-          ${s.cwd ? `cwd: ${s.cwd}` : ""}
+        <span class="meta" style="font-size: 12px;">${s.cwd ? "cwd: " + escapeHtml(s.cwd) : ""}</span>
+        <span class="actions">
+          <button onclick='openEditServer(${JSON.stringify(s.name)})'>Edit</button>
+          <button class="danger" onclick='deleteServer(${JSON.stringify(s.name)})'>Delete</button>
+          <button onclick="restartServer('${escapeHtml(s.name)}')" ${s.enabled ? "" : "disabled"}>Restart</button>
         </span>
-        <button onclick="restartServer('${s.name}')" ${s.enabled ? "" : "disabled"}>Restart</button>
       </div>
     </div>
   `;
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  }[c]));
 }
 
 async function copyText(t) {
@@ -254,33 +436,11 @@ async function copyText(t) {
   catch { toast("Copy failed", true); }
 }
 
-async function refresh() {
-  try {
-    const data = await api("/api/servers");
-    const c = $("content");
-    if (!data.servers.length) {
-      c.innerHTML = `
-        <div class="empty">
-          No servers in config.<br><br>
-          Edit <code id="cfgpath2"></code> and add an entry under <code>mcpServers</code>, then click <b>Reload config</b>.
-        </div>`;
-      const cfg = await api("/api/config");
-      $("config-path").textContent = cfg.path;
-      const cp2 = document.getElementById("cfgpath2"); if (cp2) cp2.textContent = cfg.path;
-      return;
-    }
-    c.innerHTML = `<div class="grid">${data.servers.map(renderCard).join("")}</div>`;
-    const cfg = await api("/api/config");
-    $("config-path").textContent = cfg.path;
-  } catch (e) { toast(e.message, true); }
-}
-
 async function toggleServer(name, enabled) {
   try {
     await api(`/api/servers/${encodeURIComponent(name)}/toggle`, {
       method: "POST", body: JSON.stringify({ enabled }),
     });
-    toast(enabled ? `${name}: enabled` : `${name}: disabled`);
     await refresh();
   } catch (e) { toast(e.message, true); await refresh(); }
 }
@@ -293,34 +453,75 @@ async function restartServer(name) {
   } catch (e) { toast(e.message, true); await refresh(); }
 }
 
-async function reloadConfig() {
+async function deleteServer(name) {
+  if (!confirm(`Delete server "${name}" from active config?`)) return;
   try {
-    await api("/api/reload", { method: "POST" });
-    toast("Config reloaded");
+    await api(`/api/servers/${encodeURIComponent(name)}`, { method: "DELETE" });
+    toast(`Deleted "${name}"`);
     await refresh();
   } catch (e) { toast(e.message, true); }
 }
 
-async function showMcpJson() {
+async function reloadConfig() {
   try {
-    const r = await fetch("/api/export-mcp-json");
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const text = await r.text();
-    $("mcp-json-body").textContent = text;
-    $("mcp-json-panel").hidden = false;
-    $("mcp-json-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const r = await api("/api/reload", { method: "POST" });
+    if (r.bind_changed) {
+      toast(`host/port changed (${r.bound.host}:${r.bound.port} → ${r.config.host}:${r.config.port}) — restart hub to apply`, true);
+    } else {
+      toast("Config reloaded");
+    }
+    await refresh();
   } catch (e) { toast(e.message, true); }
 }
 
-function hideMcpJson() { $("mcp-json-panel").hidden = true; }
+// --- mcp.json panel toggle (button doubles as Close) ---
+async function toggleMcpJson() {
+  const panel = $("mcp-json-panel");
+  const btn = $("btn-mcp-json");
+  if (panel.hidden) {
+    await loadMcpJson();
+    panel.hidden = false;
+    btn.textContent = "Close mcp.json";
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } else {
+    panel.hidden = true;
+    btn.textContent = "Show mcp.json";
+  }
+}
+async function loadMcpJson() {
+  const r = await fetch(`/api/view-mcp-json`);
+  if (!r.ok) { toast(`mcp.json: HTTP ${r.status}`, true); return; }
+  $("mcp-json-body").textContent = await r.text();
+}
 
+async function setTarget() {
+  const cur = STATE.activeTarget || "";
+  const path = prompt(
+    "Target mcp.json path — hub will keep this file's mcpServers in sync " +
+    "with the active profile's enabled servers. Leave blank to clear.\n\n" +
+    "Examples:\n" +
+    "  C:/Users/me/.claude.json\n" +
+    "  C:/code/myproj/.mcp.json",
+    cur,
+  );
+  if (path === null) return;
+  const trimmed = path.trim();
+  try {
+    const r = await api(`/api/mcp-files/${encodeURIComponent(STATE.active)}/target`, {
+      method: "PUT", body: JSON.stringify({ path: trimmed }),
+    });
+    if (r.error) toast(`Target set, but sync failed: ${r.error}`, true);
+    else if (r.synced) toast("Target set and synced");
+    else toast(trimmed ? "Target set" : "Target cleared");
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
 async function copyMcpJson() {
   try {
     await navigator.clipboard.writeText($("mcp-json-body").textContent);
     toast("Copied mcp.json");
   } catch { toast("Copy failed", true); }
 }
-
 function downloadMcpJson() {
   const blob = new Blob([$("mcp-json-body").textContent], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -330,9 +531,398 @@ function downloadMcpJson() {
   URL.revokeObjectURL(url);
 }
 
+// --- mcp.json file switching ---
+async function onPickFile(name) {
+  if (!name || name === STATE.active) return;
+  try {
+    await api("/api/mcp-files/active", { method: "POST", body: JSON.stringify({ name }) });
+    toast(`Switched to "${name}"`);
+    await refresh();
+  } catch (e) { toast(e.message, true); await refresh(); }
+}
+
+async function copyActiveFile() {
+  const src = STATE.active;
+  const dst = prompt(`Copy "${src}" to a new mcp.json. New name:`, `${src}-copy`);
+  if (dst === null) return;
+  const name = dst.trim();
+  if (!name) { toast("Name is required", true); return; }
+  try {
+    await api(`/api/mcp-files/${encodeURIComponent(src)}/copy`, {
+      method: "POST", body: JSON.stringify({ name }),
+    });
+    toast(`Copied "${src}" → "${name}"`);
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function renameActiveFile() {
+  const cur = STATE.active;
+  const next = prompt(`Rename mcp.json "${cur}" to:`, cur);
+  if (next === null) return;
+  const name = next.trim();
+  if (!name || name === cur) return;
+  try {
+    await api(`/api/mcp-files/${encodeURIComponent(cur)}/rename`, {
+      method: "POST", body: JSON.stringify({ name }),
+    });
+    toast(`Renamed "${cur}" → "${name}"`);
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteActiveFile() {
+  const cur = STATE.active;
+  if (!confirm(`mcp.json "${cur}"을(를) 지우시겠습니까?`)) return;
+  try {
+    await api(`/api/mcp-files/${encodeURIComponent(cur)}`, { method: "DELETE" });
+    toast(`Deleted "${cur}"`);
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+
+// --- modals ---
+function closeModal() { $("overlay-host").innerHTML = ""; }
+
+function openModal(html) {
+  $("overlay-host").innerHTML = `<div class="overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
+}
+
+function openNewFile() {
+  openModal(`
+    <div class="modal">
+      <div class="modal-head">
+        <h2>New mcp.json</h2>
+        <button class="icon" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Name (will be saved as mcp/&lt;name&gt;.json — leave blank to auto-derive when loading from path)</label>
+          <input id="nc-name" type="text" placeholder="work" />
+        </div>
+        <div class="field">
+          <label>Source</label>
+          <div class="radios">
+            <label><input type="radio" name="nc-src" value="empty" checked onchange="ncSrc('empty')" /> Empty</label>
+            <label><input type="radio" name="nc-src" value="paste" onchange="ncSrc('paste')" /> Paste mcp.json</label>
+            <label><input type="radio" name="nc-src" value="file" onchange="ncSrc('file')" /> Upload file</label>
+            <label><input type="radio" name="nc-src" value="load" onchange="ncSrc('load')" /> Load from path</label>
+          </div>
+        </div>
+        <div class="field" id="nc-paste-wrap" hidden>
+          <label>mcp.json content</label>
+          <textarea id="nc-paste" placeholder='{ "mcpServers": { ... } }'></textarea>
+        </div>
+        <div class="field" id="nc-file-wrap" hidden>
+          <label>Choose file</label>
+          <input id="nc-file" type="file" accept=".json,application/json" />
+        </div>
+        <div class="field" id="nc-load-wrap" hidden>
+          <label>Path on the hub server (file is read, all servers imported &amp; enabled, this path becomes the target)</label>
+          <input id="nc-load-path" type="text" placeholder="C:/Users/me/.claude.json" />
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button onclick="closeModal()">Cancel</button>
+        <button class="primary" onclick="submitNewFile()">Create</button>
+      </div>
+    </div>
+  `);
+}
+function ncSrc(s) {
+  $("nc-paste-wrap").hidden = s !== "paste";
+  $("nc-file-wrap").hidden = s !== "file";
+  $("nc-load-wrap").hidden = s !== "load";
+}
+async function submitNewFile() {
+  const name = $("nc-name").value.trim();
+  const sel = document.querySelector('input[name="nc-src"]:checked').value;
+
+  if (sel === "load") {
+    const path = $("nc-load-path").value.trim();
+    if (!path) { toast("Path is required for Load", true); return; }
+    try {
+      const body = name ? { path, name } : { path };
+      const r = await api("/api/mcp-files/load", { method: "POST", body: JSON.stringify(body) });
+      toast(`Loaded "${r.name}" — target set and synced`);
+      closeModal();
+      await refresh();
+    } catch (e) { toast(e.message, true); }
+    return;
+  }
+
+  if (!name) { toast("Name is required", true); return; }
+  let content = null;
+  if (sel === "paste") {
+    const t = $("nc-paste").value.trim();
+    if (t) content = t;
+  } else if (sel === "file") {
+    const f = $("nc-file").files[0];
+    if (f) content = await f.text();
+  }
+  try {
+    await api("/api/mcp-files", { method: "POST", body: JSON.stringify({ name, mcpJson: content }) });
+    await api("/api/mcp-files/active", { method: "POST", body: JSON.stringify({ name }) });
+    toast(`Created "${name}"`);
+    closeModal();
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+
+// --- add / edit server ---
+async function loadPredefinedIfNeeded() {
+  if (STATE.predefined.length) return;
+  const r = await api("/api/predefined");
+  STATE.predefined = r.predefined || [];
+}
+
+async function openAddServer() {
+  await loadPredefinedIfNeeded();
+  openModal(buildServerModal({ mode: "add" }));
+  showTab("preset");
+}
+
+function openEditServer(serverName) {
+  const s = STATE.servers.find(x => x.name === serverName);
+  if (!s) return;
+  openModal(buildServerModal({ mode: "edit", server: s }));
+  showTab("custom");
+  fillCustomFromServer(s);
+}
+
+function buildServerModal({ mode, server }) {
+  const title = mode === "add" ? "Add server" : `Edit "${server.name}"`;
+  const submitLabel = mode === "add" ? "Add" : "Save";
+  return `
+    <div class="modal">
+      <div class="modal-head">
+        <h2>${title}</h2>
+        <button class="icon" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        ${mode === "add" ? `
+          <div class="tabs">
+            <button class="tab" id="tab-preset" onclick="showTab('preset')">Predefined</button>
+            <button class="tab" id="tab-custom" onclick="showTab('custom')">Custom</button>
+          </div>
+        ` : ""}
+        <div id="pane-preset" ${mode === "edit" ? "hidden" : ""}>
+          <div class="preset-list">
+            ${STATE.predefined.map(p => `
+              <div class="preset" onclick='applyPreset(${JSON.stringify(p.id)})'>
+                <div class="label">${escapeHtml(p.label)}</div>
+                <div class="desc">${escapeHtml(p.description || "")}</div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div id="pane-custom" ${mode === "add" ? "hidden" : ""}>
+          <div class="row-2">
+            <div class="field">
+              <label>Name</label>
+              <input id="sv-name" type="text" placeholder="my-server" />
+            </div>
+            <div class="field">
+              <label>Type</label>
+              <select id="sv-type" onchange="onTypeChange()">
+                <option value="stdio">stdio</option>
+                <option value="http">http</option>
+                <option value="sse">sse</option>
+              </select>
+            </div>
+          </div>
+          <div id="stdio-fields">
+            <div class="field">
+              <label>Command</label>
+              <input id="sv-command" type="text" placeholder="npx" />
+            </div>
+            <div class="field">
+              <label>Args (one per line)</label>
+              <textarea id="sv-args" rows="4"></textarea>
+            </div>
+            <div class="field">
+              <label>Env (KEY=VALUE per line)</label>
+              <textarea id="sv-env" rows="3"></textarea>
+            </div>
+            <div class="field">
+              <label>Working directory (optional)</label>
+              <input id="sv-cwd" type="text" placeholder="" />
+            </div>
+          </div>
+          <div id="remote-fields" hidden>
+            <div class="field">
+              <label>URL</label>
+              <input id="sv-url" type="text" placeholder="http://127.0.0.1:13337/mcp" />
+            </div>
+            <div class="field">
+              <label>Headers (KEY: VALUE per line)</label>
+              <textarea id="sv-headers" rows="3"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button onclick="closeModal()">Cancel</button>
+        <button class="primary" onclick='submitServer(${JSON.stringify(mode)}, ${JSON.stringify(server ? server.name : null)})'>${submitLabel}</button>
+      </div>
+    </div>
+  `;
+}
+
+function showTab(which) {
+  for (const id of ["preset", "custom"]) {
+    const tab = $("tab-" + id);
+    const pane = $("pane-" + id);
+    if (!pane) continue;
+    if (tab) tab.classList.toggle("active", id === which);
+    pane.hidden = id !== which;
+  }
+}
+
+function onTypeChange() {
+  const t = $("sv-type").value;
+  $("stdio-fields").hidden = t !== "stdio";
+  $("remote-fields").hidden = t === "stdio";
+}
+
+function applyPreset(id) {
+  const p = STATE.predefined.find(x => x.id === id);
+  if (!p) return;
+  // Ask for variables
+  const vars = {};
+  for (const v of (p.variables || [])) {
+    const def = v.default || "";
+    const ans = prompt(`${v.label}${v.required ? " (required)" : ""}${v.placeholder ? "\nExample: " + v.placeholder : ""}`, def);
+    if (ans === null) return;
+    if (v.required && !ans.trim()) { toast(`${v.label} is required`, true); return; }
+    vars[v.key] = ans;
+  }
+  // Substitute
+  const spec = JSON.parse(JSON.stringify(p.spec));
+  const subst = (v) => typeof v === "string" ? v.replace(/\$\{(\w+)\}/g, (_, k) => vars[k] ?? "") : v;
+  if (spec.args) spec.args = spec.args.map(subst);
+  if (spec.env) for (const k in spec.env) spec.env[k] = subst(spec.env[k]);
+  if (spec.command) spec.command = subst(spec.command);
+  if (spec.url) spec.url = subst(spec.url);
+  // Switch to custom tab pre-filled
+  showTab("custom");
+  $("sv-name").value = p.default_name || p.id;
+  $("sv-type").value = spec.type || "stdio";
+  onTypeChange();
+  $("sv-command").value = spec.command || "";
+  $("sv-args").value = (spec.args || []).join("\n");
+  $("sv-env").value = Object.entries(spec.env || {}).map(([k,v]) => `${k}=${v}`).join("\n");
+  $("sv-cwd").value = spec.cwd || "";
+  $("sv-url").value = spec.url || "";
+  $("sv-headers").value = Object.entries(spec.headers || {}).map(([k,v]) => `${k}: ${v}`).join("\n");
+}
+
+function fillCustomFromServer(s) {
+  $("sv-name").value = s.name;
+  $("sv-type").value = s.type;
+  onTypeChange();
+  $("sv-command").value = s.command || "";
+  $("sv-args").value = (s.args || []).join("\n");
+  $("sv-env").value = Object.entries(s.env || {}).map(([k,v]) => `${k}=${v}`).join("\n");
+  $("sv-cwd").value = s.cwd || "";
+  $("sv-url").value = s.url || "";
+  $("sv-headers").value = Object.entries(s.headers || {}).map(([k,v]) => `${k}: ${v}`).join("\n");
+}
+
+function readCustomForm() {
+  const name = $("sv-name").value.trim();
+  const type = $("sv-type").value;
+  const spec = { type };
+  if (type === "stdio") {
+    spec.command = $("sv-command").value.trim();
+    spec.args = $("sv-args").value.split("\n").map(l => l.trim()).filter(Boolean);
+    const env = {};
+    for (const line of $("sv-env").value.split("\n")) {
+      const i = line.indexOf("=");
+      if (i > 0) env[line.slice(0, i).trim()] = line.slice(i + 1);
+    }
+    spec.env = env;
+    const cwd = $("sv-cwd").value.trim();
+    if (cwd) spec.cwd = cwd;
+  } else {
+    spec.url = $("sv-url").value.trim();
+    const headers = {};
+    for (const line of $("sv-headers").value.split("\n")) {
+      const i = line.indexOf(":");
+      if (i > 0) headers[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    }
+    spec.headers = headers;
+  }
+  return { name, spec };
+}
+
+async function submitServer(mode, originalName) {
+  const { name, spec } = readCustomForm();
+  if (!name) { toast("Name is required", true); return; }
+  if (spec.type === "stdio" && !spec.command) { toast("Command is required", true); return; }
+  if (spec.type !== "stdio" && !spec.url) { toast("URL is required", true); return; }
+  try {
+    if (mode === "add") {
+      await api("/api/servers", { method: "POST", body: JSON.stringify({ name, spec }) });
+      toast(`Added "${name}"`);
+    } else {
+      await api(`/api/servers/${encodeURIComponent(originalName)}`, {
+        method: "PUT", body: JSON.stringify({ name, spec }),
+      });
+      toast(`Saved "${name}"`);
+    }
+    closeModal();
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function openSettings() {
+  let cur;
+  try { cur = await api("/api/settings"); }
+  catch (e) { toast(e.message, true); return; }
+  openModal(`
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Hub settings</h2>
+        <button class="icon" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Public URL (advertised in generated mcp.json)</label>
+          <input id="st-public" type="text" value="${escapeHtml(cur.public_url || "")}" placeholder="http://10.0.0.5:3737  or  https://mcp.example.com" />
+        </div>
+        <p class="meta" style="margin-top: -4px;">
+          Leave blank to use whatever URL the agent connected on (currently
+          <code>${escapeHtml(cur.effective_base_url)}</code>). Set this when the hub
+          is reachable from clients via a different host than its bind address.
+        </p>
+        <p class="meta">
+          Bind: <code>${escapeHtml(cur.bound.host)}:${cur.bound.port}</code>
+          (edit <code>config.json</code> and restart the hub to change)
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button onclick="closeModal()">Cancel</button>
+        <button class="primary" onclick="saveSettings()">Save</button>
+      </div>
+    </div>
+  `);
+}
+
+async function saveSettings() {
+  const public_url = $("st-public").value.trim();
+  try {
+    await api("/api/settings", {
+      method: "PUT", body: JSON.stringify({ public_url }),
+    });
+    toast("Settings saved");
+    closeModal();
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+
 refresh();
 setInterval(refresh, 5000);
-$("meta").textContent = location.host;
 </script>
 </body>
 </html>
