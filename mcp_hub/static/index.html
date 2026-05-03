@@ -164,13 +164,17 @@
   .toast {
     position: fixed; right: 16px; bottom: 16px;
     background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
-    padding: 10px 14px; font-size: 13px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    padding: 12px 16px; font-size: 14px; font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     opacity: 0; transform: translateY(8px); transition: 0.2s;
-    pointer-events: none; max-width: 480px;
+    pointer-events: none; max-width: 520px;
+    z-index: 1000;  /* above modal overlay */
   }
   .toast.show { opacity: 1; transform: translateY(0); }
-  .toast.bad { border-color: var(--bad); color: var(--bad); }
+  .toast.bad {
+    background: var(--bad); color: white; border-color: var(--bad);
+    box-shadow: 0 8px 24px rgba(220, 38, 38, 0.5);
+  }
 
   .json-panel {
     margin: 0 0 16px;
@@ -258,7 +262,7 @@
 <header>
   <h1>MCP Hub</h1>
   <div class="config-bar">
-    <span class="meta">Config: </span>
+    <span class="meta">Project: </span>
     <select id="file-picker" onchange="onPickFile(this.value)"></select>
     <button class="icon" onclick="openNewFile()" title="Create a new mcp.json (paste/upload)">New</button>
     <button class="icon" onclick="copyActiveFile()" title="Duplicate the active mcp.json under a new name">Copy</button>
@@ -272,13 +276,13 @@
 </header>
 <main>
   <div class="toolbar">
-    <button class="primary" onclick="reloadConfig()" title="Re-read the active mcp.json + enabled overlay from disk">Reload</button>
+    <button class="primary" onclick="openAddServer()">+ Add server</button>
     <button id="btn-mcp-json" onclick="toggleMcpJson()">Show mcp.json</button>
-    <button onclick="openAddServer()">+ Add server</button>
+    <span class="radios" id="project-format-radios" title="Output format for this project's view + target sync"></span>
   </div>
 
   <div class="target-bar">
-    <span class="meta">target mcp:</span>
+    <span class="meta">target:</span>
     <code id="target-display" class="target-path">(none)</code>
     <button class="icon" onclick="setTarget()" title="Set / change the target path that this profile auto-syncs to">Set</button>
     <span class="meta" id="target-hint"></span>
@@ -286,7 +290,7 @@
 
   <div id="mcp-json-panel" class="json-panel" hidden>
     <div class="json-head">
-      <span>mcp.json (enabled servers in active file, with hub URLs)</span>
+      <span id="mcp-json-title">enabled servers in active profile, with hub URLs</span>
       <span class="json-actions">
         <button onclick="copyMcpJson()">Copy</button>
         <button onclick="downloadMcpJson()">Download</button>
@@ -343,6 +347,10 @@ async function refresh() {
     STATE.activeTarget = filesData.active_target || "";
     STATE.baseUrl = filesData.base_url || "";
     STATE.publicUrl = filesData.public_url || "";
+    STATE.clientFormatDefault = filesData.client_format_default || "claude_code";
+    STATE.clientFormat = filesData.active_client_format || STATE.clientFormatDefault;
+    renderProjectFormatRadios();
+    updateViewBtn();
     $("meta-base").textContent = STATE.baseUrl;
     $("meta-base").title = STATE.publicUrl
       ? "public URL set → used in generated mcp.json"
@@ -352,6 +360,26 @@ async function refresh() {
     renderServers();
     if (!$("mcp-json-panel").hidden) await loadMcpJson();
   } catch (e) { toast(e.message, true); }
+}
+
+function renderProjectFormatRadios() {
+  const span = $("project-format-radios");
+  if (!span) return;
+  const fmt = STATE.clientFormat;
+  span.innerHTML = `
+    <label><input type="radio" name="proj-fmt" value="claude_code" ${fmt === "claude_code" ? "checked" : ""} onchange="setProjectFormat(this.value)" /> Claude Code</label>
+    <label><input type="radio" name="proj-fmt" value="codex" ${fmt === "codex" ? "checked" : ""} onchange="setProjectFormat(this.value)" /> Codex</label>
+  `;
+}
+
+async function setProjectFormat(fmt) {
+  try {
+    await api(`/api/mcp-files/${encodeURIComponent(STATE.active)}/format`, {
+      method: "PUT", body: JSON.stringify({ client_format: fmt }),
+    });
+    toast(`Format: ${fmt === "codex" ? "Codex (config.toml)" : "Claude Code (mcp.json)"}`);
+    await refresh();
+  } catch (e) { toast(e.message, true); await refresh(); }
 }
 
 function renderTargetBar() {
@@ -462,31 +490,28 @@ async function deleteServer(name) {
   } catch (e) { toast(e.message, true); }
 }
 
-async function reloadConfig() {
-  try {
-    const r = await api("/api/reload", { method: "POST" });
-    if (r.bind_changed) {
-      toast(`host/port changed (${r.bound.host}:${r.bound.port} → ${r.config.host}:${r.config.port}) — restart hub to apply`, true);
-    } else {
-      toast("Config reloaded");
-    }
-    await refresh();
-  } catch (e) { toast(e.message, true); }
+// --- config view panel toggle (label depends on client_format) ---
+function viewLabel() {
+  return STATE.clientFormat === "codex" ? "config.toml" : "mcp.json";
 }
-
-// --- mcp.json panel toggle (button doubles as Close) ---
+function updateViewBtn() {
+  const btn = $("btn-mcp-json");
+  if (!btn) return;
+  const open = !$("mcp-json-panel").hidden;
+  btn.textContent = (open ? "Close " : "Show ") + viewLabel();
+  const title = $("mcp-json-title");
+  if (title) title.textContent = `${viewLabel()} — enabled servers in active profile, hub URLs`;
+}
 async function toggleMcpJson() {
   const panel = $("mcp-json-panel");
-  const btn = $("btn-mcp-json");
   if (panel.hidden) {
     await loadMcpJson();
     panel.hidden = false;
-    btn.textContent = "Close mcp.json";
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } else {
     panel.hidden = true;
-    btn.textContent = "Show mcp.json";
   }
+  updateViewBtn();
 }
 async function loadMcpJson() {
   const r = await fetch(`/api/view-mcp-json`);
@@ -709,8 +734,8 @@ function buildServerModal({ mode, server }) {
         <div id="pane-preset" ${mode === "edit" ? "hidden" : ""}>
           <div class="preset-list">
             ${STATE.predefined.map(p => `
-              <div class="preset" onclick='applyPreset(${JSON.stringify(p.id)})'>
-                <div class="label">${escapeHtml(p.label)}</div>
+              <div class="preset" onclick='applyPreset(${JSON.stringify(p.name)})'>
+                <div class="label">${escapeHtml(p.name)}</div>
                 <div class="desc">${escapeHtml(p.description || "")}</div>
               </div>
             `).join("")}
@@ -785,29 +810,15 @@ function onTypeChange() {
   $("remote-fields").hidden = t === "stdio";
 }
 
-function applyPreset(id) {
-  const p = STATE.predefined.find(x => x.id === id);
+function applyPreset(name) {
+  const p = STATE.predefined.find(x => x.name === name);
   if (!p) return;
-  // Ask for variables
-  const vars = {};
-  for (const v of (p.variables || [])) {
-    const def = v.default || "";
-    const ans = prompt(`${v.label}${v.required ? " (required)" : ""}${v.placeholder ? "\nExample: " + v.placeholder : ""}`, def);
-    if (ans === null) return;
-    if (v.required && !ans.trim()) { toast(`${v.label} is required`, true); return; }
-    vars[v.key] = ans;
-  }
-  // Substitute
-  const spec = JSON.parse(JSON.stringify(p.spec));
-  const subst = (v) => typeof v === "string" ? v.replace(/\$\{(\w+)\}/g, (_, k) => vars[k] ?? "") : v;
-  if (spec.args) spec.args = spec.args.map(subst);
-  if (spec.env) for (const k in spec.env) spec.env[k] = subst(spec.env[k]);
-  if (spec.command) spec.command = subst(spec.command);
-  if (spec.url) spec.url = subst(spec.url);
-  // Switch to custom tab pre-filled
+  // Spec is the entry minus name + description.
+  const { name: _n, description: _d, ...spec } = p;
+  if (!spec.type) spec.type = spec.url ? "http" : "stdio";
   showTab("custom");
-  $("sv-name").value = p.default_name || p.id;
-  $("sv-type").value = spec.type || "stdio";
+  $("sv-name").value = p.name;
+  $("sv-type").value = spec.type;
   onTypeChange();
   $("sv-command").value = spec.command || "";
   $("sv-args").value = (spec.args || []).join("\n");
@@ -880,6 +891,7 @@ async function openSettings() {
   let cur;
   try { cur = await api("/api/settings"); }
   catch (e) { toast(e.message, true); return; }
+  const fmt = cur.client_format || "claude_code";
   openModal(`
     <div class="modal">
       <div class="modal-head">
@@ -888,7 +900,18 @@ async function openSettings() {
       </div>
       <div class="modal-body">
         <div class="field">
-          <label>Public URL (advertised in generated mcp.json)</label>
+          <label>Default client format (used for newly created projects)</label>
+          <div class="radios">
+            <label><input type="radio" name="st-fmt" value="claude_code" ${fmt === "claude_code" ? "checked" : ""} /> Claude Code (mcp.json)</label>
+            <label><input type="radio" name="st-fmt" value="codex" ${fmt === "codex" ? "checked" : ""} /> Codex (config.toml)</label>
+          </div>
+        </div>
+        <p class="meta" style="margin-top: -4px;">
+          Each project keeps its own format (set inline next to its target).
+          This is just the default applied when a new project is created.
+        </p>
+        <div class="field">
+          <label>Public URL (advertised in generated config)</label>
           <input id="st-public" type="text" value="${escapeHtml(cur.public_url || "")}" placeholder="http://10.0.0.5:3737  or  https://mcp.example.com" />
         </div>
         <p class="meta" style="margin-top: -4px;">
@@ -911,9 +934,10 @@ async function openSettings() {
 
 async function saveSettings() {
   const public_url = $("st-public").value.trim();
+  const client_format = (document.querySelector('input[name="st-fmt"]:checked') || {}).value || "claude_code";
   try {
     await api("/api/settings", {
-      method: "PUT", body: JSON.stringify({ public_url }),
+      method: "PUT", body: JSON.stringify({ public_url, client_format }),
     });
     toast("Settings saved");
     closeModal();

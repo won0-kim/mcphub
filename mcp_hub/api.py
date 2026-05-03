@@ -12,6 +12,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
 from .config import ConfigStore, ServerConfig
+from .formats import merge_target_text, serialize_for_view, target_filename_hint
 from .manager import HubManager, RuntimeServer
 from .predefined import load_predefined
 
@@ -51,38 +52,30 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
     bound_port = store.settings.port
     predefined_path = predefined_path or (store.root_path.parent / "predefined.json")
 
-    def _build_hub_mcp_json(base_url: str) -> dict:
+    def _build_hub_mcp_servers(base_url: str) -> dict:
         servers: dict[str, dict] = {}
         for rt in manager.list():
             if not rt.cfg.enabled:
                 continue
             servers[rt.name] = {"type": "http", "url": f"{base_url}/mcp/{rt.name}"}
-        return {"mcpServers": servers}
+        return servers
 
     def _sync_target(base_url: str, file_name: str | None = None) -> tuple[bool, str | None]:
-        """Write the hub-URL mcp.json into the file's target path, if set.
+        """Write the hub-URL config into the file's target path, if set.
+        Format is per-project (sidecar) — falls back to hub default if unset.
         Returns (synced, error)."""
         name = file_name or store.settings.active
         path_str = store.get_target(name)
         if not path_str:
             return False, None
         target_path = Path(path_str)
+        fmt = store.get_client_format(name)
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            existing: dict = {}
-            if target_path.exists():
-                try:
-                    parsed = json.loads(target_path.read_text(encoding="utf-8"))
-                    if isinstance(parsed, dict):
-                        existing = parsed
-                except json.JSONDecodeError:
-                    existing = {}
-            existing["mcpServers"] = _build_hub_mcp_json(base_url)["mcpServers"]
-            target_path.write_text(
-                json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
-            logger.info("[target] synced %s -> %s", name, target_path)
+            existing_text = target_path.read_text(encoding="utf-8") if target_path.exists() else ""
+            new_text = merge_target_text(fmt, existing_text, _build_hub_mcp_servers(base_url))
+            target_path.write_text(new_text, encoding="utf-8")
+            logger.info("[target] synced %s (%s) -> %s", name, fmt, target_path)
             return True, None
         except Exception as e:  # noqa: BLE001
             logger.warning("[target] sync failed for %s -> %s: %s", name, target_path, e)
@@ -193,8 +186,9 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
                         "server_count": len(servers),
                         "enabled_count": sum(1 for s in servers.values() if s.enabled),
                         "active": name == store.settings.active,
-                        "path": str(store.mcp_dir / f"{name}.json"),
+                        "path": str(store.projects_dir / f"{name}.json"),
                         "target": store.get_target(name),
+                        "client_format": store.get_client_format(name),
                     }
                 )
             except Exception as e:  # noqa: BLE001
@@ -204,17 +198,21 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
                         "error": str(e),
                         "active": name == store.settings.active,
                         "target": store.get_target(name),
+                        "client_format": store.get_client_format(name),
                     }
                 )
+        active = store.settings.active
         return JSONResponse(
             {
                 "files": items,
-                "active": store.settings.active,
-                "active_target": store.get_target(store.settings.active),
+                "active": active,
+                "active_target": store.get_target(active),
+                "active_client_format": store.get_client_format(active),
                 "hub": {"host": store.settings.host, "port": store.settings.port},
                 "base_url": _base_url(request),
                 "public_url": store.settings.public_url,
-                "mcp_dir": str(store.mcp_dir),
+                "client_format_default": store.settings.client_format,
+                "projects_dir": str(store.projects_dir),
             }
         )
 
@@ -303,33 +301,17 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
             return JSONResponse({"error": str(e)}, status_code=400)
         return JSONResponse({"name": name, "content": text})
 
-    # ---- reload / mcp.json views -----------------------------------------
-
-    async def reload_active(request: Request) -> Response:
-        # Re-apply the on-disk active mcp.json + enabled overlay to the manager.
-        await manager.sync(store.active_servers())
-        _sync_target(_base_url(request))
-        cfg_host = store.settings.host
-        cfg_port = store.settings.port
-        bind_changed = (cfg_host != bound_host) or (cfg_port != bound_port)
-        return JSONResponse(
-            {
-                "servers": [_server_to_dict(rt, _base_url(request)) for rt in manager.list()],
-                "bind_changed": bind_changed,
-                "bound": {"host": bound_host, "port": bound_port},
-                "config": {"host": cfg_host, "port": cfg_port},
-            }
-        )
+    # ---- mcp.json view ---------------------------------------------------
 
     async def view_mcp_json(request: Request) -> Response:
-        """The hub-URL mcp.json for enabled servers in the active file."""
-        body_obj = _build_hub_mcp_json(_base_url(request))
-        body = json.dumps(body_obj, indent=2, ensure_ascii=False) + "\n"
-        download = request.query_params.get("download") in ("1", "true")
+        """The hub-URL config for enabled servers in the active profile,
+        in that profile's client_format (mcp.json or config.toml)."""
+        fmt = store.get_client_format(store.settings.active)
+        body, media_type = serialize_for_view(fmt, _build_hub_mcp_servers(_base_url(request)))
         headers = {}
-        if download:
-            headers["content-disposition"] = 'attachment; filename="mcp.json"'
-        return Response(body, media_type="application/json", headers=headers)
+        if request.query_params.get("download") in ("1", "true"):
+            headers["content-disposition"] = f'attachment; filename="{target_filename_hint(fmt)}"'
+        return Response(body, media_type=media_type, headers=headers)
 
     async def get_target(request: Request) -> Response:
         name = request.path_params["name"]
@@ -365,7 +347,7 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
         base = (body.get("name") or _derive_profile_name(path_str)).strip() or "imported"
         name = base
         n = 2
-        while (store.mcp_dir / f"{name}.json").exists():
+        while (store.projects_dir / f"{name}.json").exists():
             name = f"{base}-{n}"
             n += 1
 
@@ -382,6 +364,21 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
         synced, err = _sync_target(_base_url(request), name)
         return JSONResponse(
             {"ok": True, "name": name, "target": path_str, "synced": synced, "error": err}
+        )
+
+    async def set_project_format(request: Request) -> Response:
+        name = request.path_params["name"]
+        body = await request.json()
+        fmt = body.get("client_format")
+        try:
+            store.set_client_format(name, fmt)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        # If this is the active project, re-sync target with the new format.
+        if name == store.settings.active:
+            _sync_target(_base_url(request))
+        return JSONResponse(
+            {"ok": True, "name": name, "client_format": store.get_client_format(name)}
         )
 
     async def sync_target_now(request: Request) -> Response:
@@ -408,6 +405,7 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
                 "host": store.settings.host,
                 "port": store.settings.port,
                 "public_url": store.settings.public_url,
+                "client_format": store.settings.client_format,
                 "bound": {"host": bound_host, "port": bound_port},
                 "effective_base_url": _base_url(request),
             }
@@ -416,15 +414,19 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
     async def update_settings(request: Request) -> Response:
         body = await request.json()
         try:
-            store.update_hub_settings(public_url=body.get("public_url"))
+            store.update_hub_settings(
+                public_url=body.get("public_url"),
+                client_format=body.get("client_format"),
+            )
         except (ValueError, TypeError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
-        # public_url change: re-sync any active target so it picks up new URLs.
+        # Either change can affect the target file content; re-sync.
         _sync_target(_base_url(request))
         return JSONResponse(
             {
                 "ok": True,
                 "public_url": store.settings.public_url,
+                "client_format": store.settings.client_format,
                 "effective_base_url": _base_url(request),
             }
         )
@@ -493,12 +495,12 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
         Route("/api/mcp-files/{name}/raw", get_mcp_file_raw, methods=["GET"]),
         Route("/api/mcp-files/{name}/target", get_target, methods=["GET"]),
         Route("/api/mcp-files/{name}/target", set_target, methods=["PUT"]),
+        Route("/api/mcp-files/{name}/format", set_project_format, methods=["PUT"]),
         Route("/api/mcp-files/{name}/sync", sync_target_now, methods=["POST"]),
         Route("/api/mcp-files/load", load_mcp_from_path, methods=["POST"]),
 
         # misc
         Route("/api/predefined", get_predefined, methods=["GET"]),
-        Route("/api/reload", reload_active, methods=["POST"]),
         Route("/api/view-mcp-json", view_mcp_json, methods=["GET"]),
         Route("/api/settings", get_settings, methods=["GET"]),
         Route("/api/settings", update_settings, methods=["PUT"]),

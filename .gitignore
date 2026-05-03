@@ -13,5 +13,6 @@ hub.err
 .vscode/
 config.json
 mcp/
+projects/
 test/
 test_target.json*
