@@ -20,9 +20,9 @@ def main() -> None:
         help="Path to root config file (default: ./config.json)",
     )
     parser.add_argument(
-        "--mcp-dir",
-        default=os.environ.get("MCP_HUB_MCP_DIR"),
-        help="Directory holding the managed mcp.json files (default: ./mcp next to config.json)",
+        "--projects-dir",
+        default=os.environ.get("MCP_HUB_PROJECTS_DIR"),
+        help="Directory holding the managed mcp.json files (default: ./projects next to config.json)",
     )
     parser.add_argument(
         "--predefined",
@@ -40,11 +40,13 @@ def main() -> None:
     )
 
     config_path = Path(args.config).resolve()
-    mcp_dir = Path(args.mcp_dir).resolve() if args.mcp_dir else config_path.parent / "mcp"
+    projects_dir = (
+        Path(args.projects_dir).resolve() if args.projects_dir else config_path.parent / "projects"
+    )
     predefined_path = (
         Path(args.predefined).resolve() if args.predefined else config_path.parent / "predefined.json"
     )
-    store = ConfigStore(config_path, mcp_dir)
+    store = ConfigStore(config_path, projects_dir)
 
     host = args.host or store.settings.host
     port = args.port or store.settings.port
