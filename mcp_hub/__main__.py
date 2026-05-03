@@ -17,7 +17,17 @@ def main() -> None:
         "--config",
         "-c",
         default=os.environ.get("MCP_HUB_CONFIG", "config.json"),
-        help="Path to config file (default: ./config.json)",
+        help="Path to root config file (default: ./config.json)",
+    )
+    parser.add_argument(
+        "--mcp-dir",
+        default=os.environ.get("MCP_HUB_MCP_DIR"),
+        help="Directory holding the managed mcp.json files (default: ./mcp next to config.json)",
+    )
+    parser.add_argument(
+        "--predefined",
+        default=os.environ.get("MCP_HUB_PREDEFINED"),
+        help="Path to the predefined.json catalog (default: ./predefined.json next to config.json)",
     )
     parser.add_argument("--host", default=None, help="Override host from config")
     parser.add_argument("--port", type=int, default=None, help="Override port from config")
@@ -30,12 +40,16 @@ def main() -> None:
     )
 
     config_path = Path(args.config).resolve()
-    store = ConfigStore(config_path)  # ensures the file exists with defaults
+    mcp_dir = Path(args.mcp_dir).resolve() if args.mcp_dir else config_path.parent / "mcp"
+    predefined_path = (
+        Path(args.predefined).resolve() if args.predefined else config_path.parent / "predefined.json"
+    )
+    store = ConfigStore(config_path, mcp_dir)
 
-    host = args.host or store.config.host
-    port = args.port or store.config.port
+    host = args.host or store.settings.host
+    port = args.port or store.settings.port
 
-    app = create_app(config_path)
+    app = create_app(store, predefined_path=predefined_path)
 
     uvicorn.run(app, host=host, port=port, log_level=args.log_level)
 

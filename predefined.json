@@ -1,0 +1,28 @@
+[
+  {
+    "id": "puppeteer",
+    "label": "Puppeteer",
+    "description": "Headless Chrome browser automation.",
+    "default_name": "puppeteer",
+    "spec": { "type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-puppeteer"] },
+    "variables": []
+  },
+  {
+    "id": "remote-http",
+    "label": "Remote (HTTP)",
+    "description": "Connect to an MCP server already running over Streamable HTTP.",
+    "default_name": "remote",
+    "spec": { "type": "http", "url": "${url}" },
+    "variables": [
+      { "key": "url", "label": "Endpoint URL", "placeholder": "http://127.0.0.1:13337/mcp", "required": true }
+    ]
+  },
+  {
+    "id": "adb",
+    "label": "Adb",
+    "description": "Adb MCP.",
+    "default_name": "adb",
+    "spec": { "type": "stdio", "command": "python", "args": ["C:/mcp/adb/server.py"] },
+    "variables": []
+  }
+]
