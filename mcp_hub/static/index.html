@@ -679,7 +679,7 @@ async function loadPredefinedIfNeeded() {
 async function openAddServer() {
   await loadPredefinedIfNeeded();
   openModal(buildServerModal({ mode: "add" }));
-  showTab("preset");
+  showTab("custom");
 }
 
 function openEditServer(serverName) {
@@ -702,8 +702,8 @@ function buildServerModal({ mode, server }) {
       <div class="modal-body">
         ${mode === "add" ? `
           <div class="tabs">
-            <button class="tab" id="tab-preset" onclick="showTab('preset')">Predefined</button>
-            <button class="tab" id="tab-custom" onclick="showTab('custom')">Custom</button>
+            <button class="tab" id="tab-custom" onclick="showTab('custom')">Manual</button>
+            <button class="tab" id="tab-preset" onclick="showTab('preset')">From template</button>
           </div>
         ` : ""}
         <div id="pane-preset" ${mode === "edit" ? "hidden" : ""}>
