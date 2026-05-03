@@ -12,3 +12,4 @@ hub.err
 .idea/
 .vscode/
 config.json
+test/
