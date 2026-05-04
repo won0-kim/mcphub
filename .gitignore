@@ -12,6 +12,7 @@ hub.err
 .idea/
 .vscode/
 config.json
+hub.pid
 mcp/
 projects/
 test/
