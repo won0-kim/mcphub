@@ -6,7 +6,7 @@ import logging
 import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -32,14 +32,26 @@ class ServerStatus:
     prompt_count: int = 0
     resource_count: int = 0
     capabilities: dict[str, bool] = field(default_factory=dict)
+    # Names of all tools the upstream advertised at session init.
+    tools: list[str] = field(default_factory=list)
 
 
 class RuntimeServer:
-    def __init__(self, name: str, cfg: ServerConfig):
+    def __init__(
+        self,
+        name: str,
+        cfg: ServerConfig,
+        get_disabled_tools: Callable[[str], set[str]] | None = None,
+    ):
         self.name = name
         self.cfg = cfg
         self.status = ServerStatus(name=name)
         self.session_manager: StreamableHTTPSessionManager | None = None
+        # Closure over the live store so disable changes take effect without
+        # restarting the server.
+        self._get_disabled_tools = (
+            (lambda: get_disabled_tools(name)) if get_disabled_tools else (lambda: set())
+        )
 
         self._task: asyncio.Task | None = None
         self._stop_event: asyncio.Event = asyncio.Event()
@@ -123,6 +135,7 @@ class RuntimeServer:
                     try:
                         tools = (await session.list_tools()).tools
                         self.status.tool_count = len(tools)
+                        self.status.tools = [t.name for t in tools]
                     except Exception as e:  # noqa: BLE001
                         logger.warning("[%s] list_tools failed: %s", self.name, e)
                 if caps.prompts is not None:
@@ -138,7 +151,9 @@ class RuntimeServer:
                     except Exception as e:  # noqa: BLE001
                         logger.warning("[%s] list_resources failed: %s", self.name, e)
 
-                proxy_server = build_proxy_server(self.name, session, caps)
+                proxy_server = build_proxy_server(
+                    self.name, session, caps, get_disabled_tools=self._get_disabled_tools
+                )
                 manager = StreamableHTTPSessionManager(
                     app=proxy_server,
                     event_store=None,
@@ -184,9 +199,10 @@ def _format_error(e: BaseException) -> str:
 
 
 class HubManager:
-    def __init__(self):
+    def __init__(self, get_disabled_tools: Callable[[str], set[str]] | None = None):
         self._servers: dict[str, RuntimeServer] = {}
         self._lock = asyncio.Lock()
+        self._get_disabled_tools = get_disabled_tools
 
     def get(self, name: str) -> RuntimeServer | None:
         return self._servers.get(name)
@@ -212,7 +228,7 @@ class HubManager:
             for name, cfg in configs.items():
                 existing = self._servers.get(name)
                 if existing is None:
-                    rt = RuntimeServer(name, cfg)
+                    rt = RuntimeServer(name, cfg, get_disabled_tools=self._get_disabled_tools)
                     self._servers[name] = rt
                     if cfg.enabled:
                         tasks.append(rt.start())

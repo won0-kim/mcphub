@@ -99,6 +99,9 @@ class HubSettings:
     # to a profile's target file. "claude_code" = mcp.json (JSON);
     # "codex" = config.toml (TOML, [mcp_servers.<name>] tables).
     client_format: str = "claude_code"
+    # Directory served at /shared_files/*. Empty string → default (resolved
+    # to <config_dir>/shared_files at startup).
+    shared_files_dir: str = ""
 
     def to_json(self) -> dict:
         return {
@@ -107,6 +110,7 @@ class HubSettings:
             "public_url": self.public_url,
             "active": self.active,
             "client_format": self.client_format,
+            "shared_files_dir": self.shared_files_dir,
         }
 
     @classmethod
@@ -120,6 +124,7 @@ class HubSettings:
             public_url=str(data.get("public_url") or ""),
             active=data.get("active") or "default",
             client_format=cf,
+            shared_files_dir=str(data.get("shared_files_dir") or ""),
         )
 
 
@@ -305,15 +310,22 @@ class ConfigStore:
     def _read_meta(self, name: str) -> dict:
         p = self._meta_path(name)
         if not p.exists():
-            return {"enabled": [], "target": "", "client_format": ""}
+            return {"enabled": [], "target": "", "client_format": "", "disabled_tools": {}}
         try:
             raw = json.loads(p.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            return {"enabled": [], "target": "", "client_format": ""}
+            return {"enabled": [], "target": "", "client_format": "", "disabled_tools": {}}
+        dt_raw = raw.get("disabled_tools") or {}
+        disabled_tools: dict[str, list[str]] = {}
+        if isinstance(dt_raw, dict):
+            for srv, tools in dt_raw.items():
+                if isinstance(tools, list):
+                    disabled_tools[str(srv)] = [str(t) for t in tools]
         return {
             "enabled": list(raw.get("enabled") or []),
             "target": str(raw.get("target") or ""),
             "client_format": str(raw.get("client_format") or ""),
+            "disabled_tools": disabled_tools,
         }
 
     def _write_meta(self, name: str, meta: dict) -> None:
@@ -473,6 +485,7 @@ class ConfigStore:
         port: int | None = None,
         public_url: str | None = None,
         client_format: str | None = None,
+        shared_files_dir: str | None = None,
     ) -> HubSettings:
         with self._lock:
             if host is not None:
@@ -494,6 +507,8 @@ class ConfigStore:
                 if cf not in CLIENT_FORMATS:
                     raise ValueError(f"client_format must be one of {CLIENT_FORMATS}")
                 self._settings.client_format = cf
+            if shared_files_dir is not None:
+                self._settings.shared_files_dir = shared_files_dir.strip()
             self._write_settings(self._settings)
             return self._settings
 
@@ -530,6 +545,49 @@ class ConfigStore:
             meta = self._read_meta(name)
             meta["client_format"] = cf
             self._write_meta(name, meta)
+
+    # ---- per-tool disable (active project) -------------------------------
+
+    def get_disabled_tools(self, server_name: str, file_name: str | None = None) -> set[str]:
+        name = file_name or self._settings.active
+        meta = self._read_meta(name)
+        return set((meta.get("disabled_tools") or {}).get(server_name, []))
+
+    def set_tool_disabled(
+        self,
+        server_name: str,
+        tool_name: str,
+        disabled: bool,
+        file_name: str | None = None,
+    ) -> None:
+        name = file_name or self._settings.active
+        with self._lock:
+            meta = self._read_meta(name)
+            dt = dict(meta.get("disabled_tools") or {})
+            cur = set(dt.get(server_name, []))
+            if disabled:
+                cur.add(tool_name)
+            else:
+                cur.discard(tool_name)
+            if cur:
+                dt[server_name] = sorted(cur)
+            else:
+                dt.pop(server_name, None)
+            meta["disabled_tools"] = dt
+            self._write_meta(name, meta)
+
+    def prune_disabled_for_missing_servers(self, present_server_names: set[str]) -> None:
+        """Drop disabled_tools entries for servers that no longer exist in
+        the active project."""
+        with self._lock:
+            meta = self._read_meta(self._settings.active)
+            dt = dict(meta.get("disabled_tools") or {})
+            for srv in list(dt.keys()):
+                if srv not in present_server_names:
+                    del dt[srv]
+            if dt != (meta.get("disabled_tools") or {}):
+                meta["disabled_tools"] = dt
+                self._write_meta(self._settings.active, meta)
 
     # ---- enabled overlay --------------------------------------------------
 
@@ -626,4 +684,9 @@ def _write_meta_file(path: Path, meta: dict) -> None:
     cf = (meta.get("client_format") or "").strip()
     if cf:
         body["client_format"] = cf
+    dt = meta.get("disabled_tools") or {}
+    if isinstance(dt, dict) and any(dt.values()):
+        body["disabled_tools"] = {
+            srv: sorted(set(tools)) for srv, tools in dt.items() if tools
+        }
     path.write_text(json.dumps(body, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

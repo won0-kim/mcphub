@@ -1,24 +1,46 @@
 """Build a lowlevel MCP Server that forwards every request to an upstream ClientSession."""
 from __future__ import annotations
 
+from typing import Callable
+
 from mcp import ClientSession, types
 from mcp.server.lowlevel import Server
+
+
+def _empty_disabled() -> set[str]:
+    return set()
 
 
 def build_proxy_server(
     name: str,
     upstream: ClientSession,
     upstream_caps: types.ServerCapabilities,
+    get_disabled_tools: Callable[[], set[str]] = _empty_disabled,
 ) -> Server:
     proxy: Server = Server(name)
 
     if upstream_caps.tools is not None:
         async def _list_tools(req: types.ListToolsRequest):
             result = await upstream.list_tools(cursor=req.params.cursor if req.params else None)
+            disabled = get_disabled_tools()
+            if disabled:
+                result.tools = [t for t in result.tools if t.name not in disabled]
             return types.ServerResult(result)
 
         async def _call_tool(req: types.CallToolRequest):
             params = req.params
+            if params.name in get_disabled_tools():
+                return types.ServerResult(
+                    types.CallToolResult(
+                        content=[
+                            types.TextContent(
+                                type="text",
+                                text=f"Tool '{params.name}' is disabled by the hub.",
+                            )
+                        ],
+                        isError=True,
+                    )
+                )
             result = await upstream.call_tool(params.name, params.arguments or None)
             return types.ServerResult(result)
 

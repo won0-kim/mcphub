@@ -236,6 +236,14 @@
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
   .preset-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+  .tool-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow-y: auto; }
+  .tool-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel); cursor: pointer;
+  }
+  .tool-row:hover { background: var(--panel-2); }
+  .tool-row .tool-name { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px; }
   .preset {
     padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
     cursor: pointer; background: var(--panel);
@@ -436,7 +444,10 @@ function renderCard(s) {
       </div>
       <div class="cmd">${escapeHtml(sourceLine)}</div>
       <div class="stats">
-        <span class="stat"><span class="v">${s.tool_count}</span> <span class="l">tools</span></span>
+        <span class="stat">
+          <span class="v">${s.enabled_tool_count}${s.disabled_tool_count ? `<span class="l"> / ${s.tool_count}</span>` : ""}</span>
+          <span class="l">tools</span>
+        </span>
         <span class="stat"><span class="v">${s.prompt_count}</span> <span class="l">prompts</span></span>
         <span class="stat"><span class="v">${s.resource_count}</span> <span class="l">resources</span></span>
         <span class="stat"><span class="l">caps:</span> <span class="v">${caps}</span></span>
@@ -450,6 +461,7 @@ function renderCard(s) {
       <div class="row">
         <span class="meta" style="font-size: 12px;">${s.cwd ? "cwd: " + escapeHtml(s.cwd) : ""}</span>
         <span class="actions">
+          <button onclick='openServerTools(${JSON.stringify(s.name)})' ${s.tool_count ? "" : "disabled"} title="Disable individual tools">Tools</button>
           <button onclick='openEditServer(${JSON.stringify(s.name)})'>Edit</button>
           <button class="danger" onclick='deleteServer(${JSON.stringify(s.name)})'>Delete</button>
           <button onclick="restartServer('${escapeHtml(s.name)}')" ${s.enabled ? "" : "disabled"}>Restart</button>
@@ -707,6 +719,87 @@ async function openAddServer() {
   showTab("custom");
 }
 
+async function openServerTools(serverName) {
+  let data;
+  try { data = await api(`/api/servers/${encodeURIComponent(serverName)}/tools`); }
+  catch (e) { toast(e.message, true); return; }
+  // Draft state: original disabled set + current pending edits. Save commits
+  // the diff in one batch; Cancel discards.
+  STATE.toolsDraft = {
+    server: serverName,
+    original: new Map((data.tools || []).map(t => [t.name, !!t.disabled])),
+    current: new Map((data.tools || []).map(t => [t.name, !!t.disabled])),
+  };
+  const rows = (data.tools || []).map(t => `
+    <label class="tool-row">
+      <input type="checkbox" ${t.disabled ? "" : "checked"} data-tool="${escapeHtml(t.name)}"
+        onchange="updateToolDraft(this.dataset.tool, !this.checked)" />
+      <span class="tool-name">${escapeHtml(t.name)}</span>
+    </label>
+  `).join("");
+  openModal(`
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Tools — ${escapeHtml(serverName)}</h2>
+        <button class="icon" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        ${data.note ? `<p class="meta">${escapeHtml(data.note)}</p>` : ""}
+        ${data.tools && data.tools.length ? `<div class="tool-list">${rows}</div>` : '<p class="meta">No tools advertised by this server.</p>'}
+        <p class="meta" id="tools-dirty" style="margin-top: 10px;"></p>
+      </div>
+      <div class="modal-foot">
+        <button onclick="closeModal()">Cancel</button>
+        <button class="primary" id="btn-save-tools" onclick="saveServerTools()" disabled>Save</button>
+      </div>
+    </div>
+  `);
+}
+
+function updateToolDraft(toolName, disabled) {
+  const d = STATE.toolsDraft;
+  if (!d) return;
+  d.current.set(toolName, disabled);
+  const changes = _toolDraftDiff(d);
+  const btn = $("btn-save-tools");
+  const dirty = $("tools-dirty");
+  if (btn) btn.disabled = changes.length === 0;
+  if (dirty) dirty.textContent = changes.length ? `${changes.length} pending change${changes.length > 1 ? "s" : ""}` : "";
+}
+
+function _toolDraftDiff(d) {
+  const diffs = [];
+  for (const [name, cur] of d.current) {
+    if ((d.original.get(name) ?? false) !== cur) diffs.push([name, cur]);
+  }
+  return diffs;
+}
+
+async function saveServerTools() {
+  const d = STATE.toolsDraft;
+  if (!d) return;
+  const diffs = _toolDraftDiff(d);
+  if (!diffs.length) { closeModal(); return; }
+  const btn = $("btn-save-tools");
+  if (btn) btn.disabled = true;
+  const errs = [];
+  for (const [tool, disabled] of diffs) {
+    try {
+      await api(`/api/servers/${encodeURIComponent(d.server)}/tools/${encodeURIComponent(tool)}/toggle`, {
+        method: "POST", body: JSON.stringify({ disabled }),
+      });
+    } catch (e) { errs.push(`${tool}: ${e.message}`); }
+  }
+  if (errs.length) {
+    toast(`Saved with errors: ${errs.join("; ")}`, true);
+  } else {
+    toast(`Saved ${diffs.length} tool change${diffs.length > 1 ? "s" : ""}`);
+  }
+  STATE.toolsDraft = null;
+  closeModal();
+  await refresh();
+}
+
 function openEditServer(serverName) {
   const s = STATE.servers.find(x => x.name === serverName);
   if (!s) return;
@@ -919,6 +1012,15 @@ async function openSettings() {
           <code>${escapeHtml(cur.effective_base_url)}</code>). Set this when the hub
           is reachable from clients via a different host than its bind address.
         </p>
+        <div class="field">
+          <label>Shared files directory (served at <code>/shared_files/&lt;name&gt;</code>)</label>
+          <input id="st-shared" type="text" value="${escapeHtml(cur.shared_files_dir || "")}" placeholder="${escapeHtml(cur.shared_files_dir_effective || "")}" />
+        </div>
+        <p class="meta" style="margin-top: -4px;">
+          Leave blank to use the default (<code>${escapeHtml(cur.shared_files_dir_effective || "")}</code>).
+          Files dropped here are reachable at <code>${escapeHtml(cur.effective_base_url)}/shared_files/&lt;filename&gt;</code>.
+          Changing the path requires a hub restart.
+        </p>
         <p class="meta">
           Bind: <code>${escapeHtml(cur.bound.host)}:${cur.bound.port}</code>
           (edit <code>config.json</code> and restart the hub to change)
@@ -935,11 +1037,16 @@ async function openSettings() {
 async function saveSettings() {
   const public_url = $("st-public").value.trim();
   const client_format = (document.querySelector('input[name="st-fmt"]:checked') || {}).value || "claude_code";
+  const shared_files_dir = $("st-shared").value.trim();
   try {
-    await api("/api/settings", {
-      method: "PUT", body: JSON.stringify({ public_url, client_format }),
+    const r = await api("/api/settings", {
+      method: "PUT", body: JSON.stringify({ public_url, client_format, shared_files_dir }),
     });
-    toast("Settings saved");
+    if (r.shared_dir_remount_needed) {
+      toast(`Settings saved. shared_files dir → ${r.shared_files_dir_effective} — restart hub to apply`, true);
+    } else {
+      toast("Settings saved");
+    }
     closeModal();
     await refresh();
   } catch (e) { toast(e.message, true); }
