@@ -10,6 +10,7 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from .config import ConfigStore, ServerConfig
 from .formats import merge_target_text, serialize_for_view, target_filename_hint
@@ -19,7 +20,13 @@ from .predefined import load_predefined
 logger = logging.getLogger(__name__)
 
 
-def _server_to_dict(rt: RuntimeServer, base_url: str = "") -> dict:
+def _server_to_dict(
+    rt: RuntimeServer,
+    base_url: str = "",
+    disabled_tools: set[str] | None = None,
+) -> dict:
+    disabled = disabled_tools or set()
+    enabled_tool_count = sum(1 for t in rt.status.tools if t not in disabled) if rt.status.tools else rt.status.tool_count
     return {
         "name": rt.name,
         "type": rt.cfg.type,
@@ -36,6 +43,8 @@ def _server_to_dict(rt: RuntimeServer, base_url: str = "") -> dict:
         "server_info": rt.status.server_info,
         "capabilities": rt.status.capabilities,
         "tool_count": rt.status.tool_count,
+        "enabled_tool_count": enabled_tool_count,
+        "disabled_tool_count": len(disabled & set(rt.status.tools)) if rt.status.tools else len(disabled),
         "prompt_count": rt.status.prompt_count,
         "resource_count": rt.status.resource_count,
         "mcp_url": f"{base_url}/mcp/{rt.name}" if base_url else f"/mcp/{rt.name}",
@@ -46,11 +55,20 @@ def _server_config_from_body(body: dict) -> ServerConfig:
     return ServerConfig.from_mcp_json(body)
 
 
+def _resolve_shared_dir(store: ConfigStore) -> Path:
+    raw = store.settings.shared_files_dir.strip()
+    if raw:
+        return Path(raw).expanduser()
+    return store.root_path.parent / "shared_files"
+
+
 def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starlette:
-    manager = HubManager()
+    manager = HubManager(get_disabled_tools=store.get_disabled_tools)
     bound_host = store.settings.host
     bound_port = store.settings.port
     predefined_path = predefined_path or (store.root_path.parent / "predefined.json")
+    shared_dir = _resolve_shared_dir(store)
+    shared_dir.mkdir(parents=True, exist_ok=True)
 
     def _build_hub_mcp_servers(base_url: str) -> dict:
         servers: dict[str, dict] = {}
@@ -108,7 +126,7 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
     async def list_servers(request: Request) -> Response:
         return JSONResponse(
             {
-                "servers": [_server_to_dict(rt, _base_url(request)) for rt in manager.list()],
+                "servers": [_server_to_dict(rt, _base_url(request), store.get_disabled_tools(rt.name)) for rt in manager.list()],
                 "active": store.settings.active,
                 "active_path": str(store.active_path()),
             }
@@ -124,7 +142,41 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
         except KeyError:
             return JSONResponse({"error": f"unknown server '{name}'"}, status_code=404)
         _sync_target(_base_url(request))
-        return JSONResponse(_server_to_dict(rt, _base_url(request)))
+        return JSONResponse(_server_to_dict(rt, _base_url(request), store.get_disabled_tools(rt.name)))
+
+    async def list_server_tools(request: Request) -> Response:
+        name = request.path_params["name"]
+        rt = manager.get(name)
+        if rt is None:
+            return JSONResponse({"error": f"unknown server '{name}'"}, status_code=404)
+        disabled = store.get_disabled_tools(name)
+        tools = [{"name": t, "disabled": t in disabled} for t in rt.status.tools]
+        return JSONResponse(
+            {
+                "server": name,
+                "tools": tools,
+                "running": rt.status.status == "running",
+                "note": (
+                    None
+                    if rt.status.tools
+                    else "server has no cached tool list — start/restart it to refresh"
+                ),
+            }
+        )
+
+    async def toggle_tool(request: Request) -> Response:
+        name = request.path_params["name"]
+        tool = request.path_params["tool"]
+        body = await request.json()
+        # Accept either {"disabled": bool} or {"enabled": bool}
+        if "disabled" in body:
+            disabled = bool(body["disabled"])
+        else:
+            disabled = not bool(body.get("enabled", True))
+        store.set_tool_disabled(name, tool, disabled)
+        return JSONResponse(
+            {"ok": True, "server": name, "tool": tool, "disabled": disabled}
+        )
 
     async def restart_server(request: Request) -> Response:
         name = request.path_params["name"]
@@ -132,7 +184,7 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
             rt = await manager.restart(name)
         except KeyError:
             return JSONResponse({"error": f"unknown server '{name}'"}, status_code=404)
-        return JSONResponse(_server_to_dict(rt, _base_url(request)))
+        return JSONResponse(_server_to_dict(rt, _base_url(request), store.get_disabled_tools(rt.name)))
 
     async def add_server(request: Request) -> Response:
         body = await request.json()
@@ -406,6 +458,8 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
                 "port": store.settings.port,
                 "public_url": store.settings.public_url,
                 "client_format": store.settings.client_format,
+                "shared_files_dir": store.settings.shared_files_dir,
+                "shared_files_dir_effective": str(_resolve_shared_dir(store)),
                 "bound": {"host": bound_host, "port": bound_port},
                 "effective_base_url": _base_url(request),
             }
@@ -417,9 +471,19 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
             store.update_hub_settings(
                 public_url=body.get("public_url"),
                 client_format=body.get("client_format"),
+                shared_files_dir=body.get("shared_files_dir"),
             )
         except (ValueError, TypeError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
+        shared_dir_changed = "shared_files_dir" in body
+        new_shared_dir = _resolve_shared_dir(store)
+        if shared_dir_changed:
+            try:
+                new_shared_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                return JSONResponse(
+                    {"error": f"failed to create shared dir: {e}"}, status_code=400
+                )
         # Either change can affect the target file content; re-sync.
         _sync_target(_base_url(request))
         return JSONResponse(
@@ -427,6 +491,10 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
                 "ok": True,
                 "public_url": store.settings.public_url,
                 "client_format": store.settings.client_format,
+                "shared_files_dir": store.settings.shared_files_dir,
+                "shared_files_dir_effective": str(new_shared_dir),
+                "shared_dir_remount_needed": shared_dir_changed
+                and Path(new_shared_dir) != Path(shared_dir),
                 "effective_base_url": _base_url(request),
             }
         )
@@ -483,6 +551,8 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
         Route("/api/servers/{name}", delete_server, methods=["DELETE"]),
         Route("/api/servers/{name}/toggle", toggle_server, methods=["POST"]),
         Route("/api/servers/{name}/restart", restart_server, methods=["POST"]),
+        Route("/api/servers/{name}/tools", list_server_tools, methods=["GET"]),
+        Route("/api/servers/{name}/tools/{tool}/toggle", toggle_tool, methods=["POST"]),
 
         # mcp.json file collection
         Route("/api/mcp-files", list_mcp_files, methods=["GET"]),
@@ -508,6 +578,11 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
 
     app = Starlette(routes=routes, lifespan=lifespan)
     app.router.routes.append(Mount("/mcp", app=mcp_asgi))
+    # Static file sharing — directory is auto-created at startup. StaticFiles
+    # already blocks path traversal (`../`) and refuses directory listings.
+    app.router.routes.append(
+        Mount("/shared_files", app=StaticFiles(directory=str(shared_dir), check_dir=False))
+    )
     return app
 
 
