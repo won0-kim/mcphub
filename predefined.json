@@ -1,19 +1,14 @@
 {
   "mcpServers": {
-    "puppeteer": {
-      "description": "Headless Chrome browser automation.",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
-    },
-    "remote-http": {
-      "description": "Connect to an MCP server already running over Streamable HTTP.",
-      "type": "http",
-      "url": "http://127.0.0.1:13337/mcp"
-    },
     "ida": {
       "description": "IDA MCP",
       "type": "http",
       "url": "http://127.0.0.1:13337/mcp"
+    },
+    "jeb": {
+      "description": "JEB MCP",
+      "type": "http",
+      "url": "http://127.0.0.1:18800/mcp"
     },
     "adb": {
       "description": "Adb MCP.",
@@ -24,13 +19,19 @@
       "command": "uv",
       "args": ["run", "--directory", "C:/mcp/inspect", "python", "server.py"]
     },
-    "jeb": {
-      "command": "python",
-      "args": ["C:/Users/won0/Desktop/jeb-pro-5.37.0.202602111657-KiwanKo-1059114712286911075/mcp_server/jeb_mcp_server.py"]
-    },
     "remote-powershell": {
         "command": "python",
         "args": ["C:/mcp/powershell/server.py"]
-    }
+    },
+    "puppeteer": {
+      "description": "Headless Chrome browser automation.",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+    },
+    "remote-http": {
+      "description": "Connect to an MCP server already running over Streamable HTTP.",
+      "type": "http",
+      "url": "http://127.0.0.1:13337/mcp"
+    },
   }
 }

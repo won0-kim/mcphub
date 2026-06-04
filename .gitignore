@@ -17,3 +17,4 @@ mcp/
 projects/
 test/
 test_target.json*
+shared_files/
