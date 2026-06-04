@@ -12,7 +12,7 @@ Inspired by [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) and the server-
 config.json                       # hub-only: host, port, public_url, active, client_format default
 projects/<name>.json              # standard mcp.json — `{"mcpServers": {...}}`. Copy directly into an agent if you want.
 projects/<name>.meta.json         # hub-only sidecar: { enabled: [...], target: "...", client_format: "..." }
-predefined.json                   # editable catalog shown in "+ Add server → From template"
+templates.json                   # editable catalog shown in "+ Add server → From template"
 ```
 
 The split is intentional: `projects/<name>.json` stays a pure mcp.json artifact (no `enabled` / `target` pollution) so it's portable. All hub-side state for that project lives next to it in `<name>.meta.json`.
@@ -46,7 +46,7 @@ CLI flags:
 
 - `--config <path>` — root config (default `./config.json`)
 - `--projects-dir <path>` — where projects + sidecars live (default `<config>/../projects`)
-- `--predefined <path>` — catalog file (default `<config>/../predefined.json`)
+- `--templates <path>` — catalog file (default `<config>/../templates.json`)
 - `--host` / `--port` — override bind once (otherwise read from `config.json`)
 
 ## Concepts
@@ -69,7 +69,7 @@ CLI flags:
 ## "+ Add server" sources
 
 - **Manual** — fill the form yourself (default tab).
-- **From template** — pick from `predefined.json`, fields are pre-filled into the Manual form for editing.
+- **From template** — pick from `templates.json`, fields are pre-filled into the Manual form for editing.
 
 ## Connecting an agent
 
@@ -114,14 +114,14 @@ Example (manual paste, Claude Code):
 | PUT | `/api/mcp-files/{name}/format` | Set per-project client format (`{client_format}`) |
 | POST | `/api/mcp-files/{name}/sync` | Force write target now |
 | POST | `/api/mcp-files/load` | Import an existing mcp.json from a server-side path: creates a project, enables every server, sets that path as the target (`{path, name?}`) |
-| GET | `/api/predefined` | Read `predefined.json` (re-read on every request) |
+| GET | `/api/templates` | Read `templates.json` (re-read on every request) |
 | GET / PUT | `/api/settings` | Hub settings: `public_url`, `client_format` default. (`host`/`port` are read-only; edit `config.json` and restart.) |
 | GET | `/api/view-mcp-json` | Hub-URL config in the active project's format (mcp.json or config.toml) |
 | GET / POST / DELETE | `/mcp/{name}` | Streamable HTTP MCP endpoint that proxies to the upstream server |
 
-## Editing `predefined.json`
+## Editing `templates.json`
 
-The "From template" tab is loaded fresh from `predefined.json` on every request — edit the file and refresh the modal.
+The "From template" tab is loaded fresh from `templates.json` on every request — edit the file and refresh the modal.
 
 The schema mirrors a standard mcp.json, with an optional per-server `description`:
 

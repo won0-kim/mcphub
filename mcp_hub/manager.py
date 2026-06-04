@@ -32,8 +32,9 @@ class ServerStatus:
     prompt_count: int = 0
     resource_count: int = 0
     capabilities: dict[str, bool] = field(default_factory=dict)
-    # Names of all tools the upstream advertised at session init.
-    tools: list[str] = field(default_factory=list)
+    # Cached tool metadata advertised at session init. Each entry:
+    # {"name": str, "description": str, "input_schema": dict}.
+    tools: list[dict] = field(default_factory=list)
 
 
 class RuntimeServer:
@@ -135,7 +136,14 @@ class RuntimeServer:
                     try:
                         tools = (await session.list_tools()).tools
                         self.status.tool_count = len(tools)
-                        self.status.tools = [t.name for t in tools]
+                        self.status.tools = [
+                            {
+                                "name": t.name,
+                                "description": t.description or "",
+                                "input_schema": t.inputSchema or {},
+                            }
+                            for t in tools
+                        ]
                     except Exception as e:  # noqa: BLE001
                         logger.warning("[%s] list_tools failed: %s", self.name, e)
                 if caps.prompts is not None:

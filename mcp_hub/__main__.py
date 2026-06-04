@@ -46,9 +46,9 @@ def main() -> None:
         help="Directory holding the managed mcp.json files (default: ./projects next to config.json)",
     )
     parser.add_argument(
-        "--predefined",
-        default=os.environ.get("MCP_HUB_PREDEFINED"),
-        help="Path to the predefined.json catalog (default: ./predefined.json next to config.json)",
+        "--templates",
+        default=os.environ.get("MCP_HUB_TEMPLATES"),
+        help="Path to the templates.json catalog (default: ./templates.json next to config.json)",
     )
     parser.add_argument("--host", default=None, help="Override host from config")
     parser.add_argument("--port", type=int, default=None, help="Override port from config")
@@ -64,15 +64,15 @@ def main() -> None:
     projects_dir = (
         Path(args.projects_dir).resolve() if args.projects_dir else config_path.parent / "projects"
     )
-    predefined_path = (
-        Path(args.predefined).resolve() if args.predefined else config_path.parent / "predefined.json"
+    templates_path = (
+        Path(args.templates).resolve() if args.templates else config_path.parent / "templates.json"
     )
     store = ConfigStore(config_path, projects_dir)
 
     host = args.host or store.settings.host
     port = args.port or store.settings.port
 
-    app = create_app(store, predefined_path=predefined_path)
+    app = create_app(store, templates_path=templates_path)
 
     _write_pid_file(config_path.parent / "hub.pid")
 

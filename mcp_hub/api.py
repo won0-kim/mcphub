@@ -15,7 +15,7 @@ from starlette.staticfiles import StaticFiles
 from .config import ConfigStore, ServerConfig
 from .formats import merge_target_text, serialize_for_view, target_filename_hint
 from .manager import HubManager, RuntimeServer
-from .predefined import load_predefined
+from .templates import load_templates
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,11 @@ def _server_to_dict(
     disabled_tools: set[str] | None = None,
 ) -> dict:
     disabled = disabled_tools or set()
-    enabled_tool_count = sum(1 for t in rt.status.tools if t not in disabled) if rt.status.tools else rt.status.tool_count
+    tool_names = {t["name"] for t in rt.status.tools}
+    enabled_tool_count = (
+        sum(1 for n in tool_names if n not in disabled)
+        if tool_names else rt.status.tool_count
+    )
     return {
         "name": rt.name,
         "type": rt.cfg.type,
@@ -44,7 +48,7 @@ def _server_to_dict(
         "capabilities": rt.status.capabilities,
         "tool_count": rt.status.tool_count,
         "enabled_tool_count": enabled_tool_count,
-        "disabled_tool_count": len(disabled & set(rt.status.tools)) if rt.status.tools else len(disabled),
+        "disabled_tool_count": len(disabled & tool_names) if tool_names else len(disabled),
         "prompt_count": rt.status.prompt_count,
         "resource_count": rt.status.resource_count,
         "mcp_url": f"{base_url}/mcp/{rt.name}" if base_url else f"/mcp/{rt.name}",
@@ -62,11 +66,11 @@ def _resolve_shared_dir(store: ConfigStore) -> Path:
     return store.root_path.parent / "shared_files"
 
 
-def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starlette:
+def create_app(store: ConfigStore, templates_path: Path | None = None) -> Starlette:
     manager = HubManager(get_disabled_tools=store.get_disabled_tools)
     bound_host = store.settings.host
     bound_port = store.settings.port
-    predefined_path = predefined_path or (store.root_path.parent / "predefined.json")
+    templates_path = templates_path or (store.root_path.parent / "templates.json")
     shared_dir = _resolve_shared_dir(store)
     shared_dir.mkdir(parents=True, exist_ok=True)
 
@@ -150,7 +154,15 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
         if rt is None:
             return JSONResponse({"error": f"unknown server '{name}'"}, status_code=404)
         disabled = store.get_disabled_tools(name)
-        tools = [{"name": t, "disabled": t in disabled} for t in rt.status.tools]
+        tools = [
+            {
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "input_schema": t.get("input_schema") or {},
+                "disabled": t["name"] in disabled,
+            }
+            for t in rt.status.tools
+        ]
         return JSONResponse(
             {
                 "server": name,
@@ -444,11 +456,11 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
             return JSONResponse({"ok": False, "error": err}, status_code=500)
         return JSONResponse({"ok": True, "target": store.get_target(name)})
 
-    async def get_predefined(request: Request) -> Response:
-        # Re-read on each request so users can edit predefined.json without
+    async def get_templates(request: Request) -> Response:
+        # Re-read on each request so users can edit templates.json without
         # restarting the hub.
         return JSONResponse(
-            {"predefined": load_predefined(predefined_path), "path": str(predefined_path)}
+            {"templates": load_templates(templates_path), "path": str(templates_path)}
         )
 
     async def get_settings(request: Request) -> Response:
@@ -570,7 +582,7 @@ def create_app(store: ConfigStore, predefined_path: Path | None = None) -> Starl
         Route("/api/mcp-files/load", load_mcp_from_path, methods=["POST"]),
 
         # misc
-        Route("/api/predefined", get_predefined, methods=["GET"]),
+        Route("/api/templates", get_templates, methods=["GET"]),
         Route("/api/view-mcp-json", view_mcp_json, methods=["GET"]),
         Route("/api/settings", get_settings, methods=["GET"]),
         Route("/api/settings", update_settings, methods=["PUT"]),

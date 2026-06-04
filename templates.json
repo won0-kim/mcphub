@@ -15,10 +15,6 @@
       "command": "python",
       "args": ["C:/mcp/adb/server.py"]
     },
-    "browser-inspect": {
-      "command": "uv",
-      "args": ["run", "--directory", "C:/mcp/inspect", "python", "server.py"]
-    },
     "remote-powershell": {
         "command": "python",
         "args": ["C:/mcp/powershell/server.py"]
@@ -32,6 +28,6 @@
       "description": "Connect to an MCP server already running over Streamable HTTP.",
       "type": "http",
       "url": "http://127.0.0.1:13337/mcp"
-    },
+    }
   }
 }

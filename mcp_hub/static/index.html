@@ -237,13 +237,51 @@
 
   .preset-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
   .tool-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow-y: auto; }
-  .tool-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
-    background: var(--panel); cursor: pointer;
+  .tool-item {
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel);
   }
-  .tool-row:hover { background: var(--panel-2); }
-  .tool-row .tool-name { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px; }
+  .tool-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px;
+  }
+  .tool-name-btn {
+    flex: 1; display: flex; align-items: center; gap: 6px;
+    background: transparent; border: none; padding: 0; margin: 0;
+    color: var(--text); text-align: left; cursor: pointer;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px;
+  }
+  .tool-name-btn:hover { color: var(--accent); }
+  .tool-name-btn .chev {
+    display: inline-block; color: var(--muted); font-size: 10px;
+    transition: transform 0.15s; width: 10px;
+  }
+  .tool-item.open .tool-name-btn .chev { transform: rotate(90deg); }
+  .tool-detail { padding: 0 12px 10px 28px; }
+  .tool-desc { color: var(--muted); font-size: 12px;
+    line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  }
+  .tool-desc.empty { font-style: italic; }
+  .tool-args { margin-top: 8px; }
+  .tool-args-label {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.05em; margin-bottom: 4px;
+  }
+  .tool-arg {
+    display: grid; grid-template-columns: auto auto 1fr; gap: 8px;
+    padding: 4px 0; font-size: 12px; align-items: baseline;
+  }
+  .tool-arg + .tool-arg { border-top: 1px dashed var(--border); }
+  .tool-arg .a-name {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    color: var(--text); font-weight: 600;
+  }
+  .tool-arg .a-name .req { color: var(--bad); margin-left: 2px; }
+  .tool-arg .a-type {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    color: var(--accent); font-size: 11px;
+  }
+  .tool-arg .a-desc { color: var(--muted); white-space: pre-wrap; word-break: break-word; }
   .preset {
     padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
     cursor: pointer; background: var(--panel);
@@ -283,17 +321,17 @@
   </span>
 </header>
 <main>
-  <div class="toolbar">
-    <button class="primary" onclick="openAddServer()">+ Add server</button>
-    <button id="btn-mcp-json" onclick="toggleMcpJson()">Show mcp.json</button>
-    <span class="radios" id="project-format-radios" title="Output format for this project's view + target sync"></span>
-  </div>
-
   <div class="target-bar">
     <span class="meta">target:</span>
     <code id="target-display" class="target-path">(none)</code>
     <button class="icon" onclick="setTarget()" title="Set / change the target path that this profile auto-syncs to">Set</button>
     <span class="meta" id="target-hint"></span>
+  </div>
+
+  <div class="toolbar">
+    <button class="primary" onclick="openAddServer()">+ Add server</button>
+    <button id="btn-mcp-json" onclick="toggleMcpJson()">Show mcp.json</button>
+    <span class="radios" id="project-format-radios" title="Output format for this project's view + target sync"></span>
   </div>
 
   <div id="mcp-json-panel" class="json-panel" hidden>
@@ -341,7 +379,7 @@ function escapeHtml(s) {
   }[c]));
 }
 
-let STATE = { active: null, servers: [], files: [], predefined: [] };
+let STATE = { active: null, servers: [], files: [], templates: [] };
 
 async function refresh() {
   try {
@@ -622,7 +660,9 @@ async function deleteActiveFile() {
 function closeModal() { $("overlay-host").innerHTML = ""; }
 
 function openModal(html) {
-  $("overlay-host").innerHTML = `<div class="overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
+  // Modal closes only via explicit Cancel/Save/✕ — backdrop clicks are
+  // ignored so accidental clicks don't drop in-progress form input.
+  $("overlay-host").innerHTML = `<div class="overlay">${html}</div>`;
 }
 
 function openNewFile() {
@@ -707,14 +747,14 @@ async function submitNewFile() {
 }
 
 // --- add / edit server ---
-async function loadPredefinedIfNeeded() {
-  if (STATE.predefined.length) return;
-  const r = await api("/api/predefined");
-  STATE.predefined = r.predefined || [];
+async function loadTemplatesIfNeeded() {
+  if (STATE.templates.length) return;
+  const r = await api("/api/templates");
+  STATE.templates = r.templates || [];
 }
 
 async function openAddServer() {
-  await loadPredefinedIfNeeded();
+  await loadTemplatesIfNeeded();
   openModal(buildServerModal({ mode: "add" }));
   showTab("custom");
 }
@@ -730,13 +770,27 @@ async function openServerTools(serverName) {
     original: new Map((data.tools || []).map(t => [t.name, !!t.disabled])),
     current: new Map((data.tools || []).map(t => [t.name, !!t.disabled])),
   };
-  const rows = (data.tools || []).map(t => `
-    <label class="tool-row">
-      <input type="checkbox" ${t.disabled ? "" : "checked"} data-tool="${escapeHtml(t.name)}"
-        onchange="updateToolDraft(this.dataset.tool, !this.checked)" />
-      <span class="tool-name">${escapeHtml(t.name)}</span>
-    </label>
-  `).join("");
+  const rows = (data.tools || []).map((t, i) => {
+    const id = `tool-item-${i}`;
+    const desc = (t.description || "").trim();
+    const argsHtml = renderToolArgs(t.input_schema || {});
+    return `
+    <div class="tool-item" id="${id}">
+      <div class="tool-head">
+        <input type="checkbox" ${t.disabled ? "" : "checked"} data-tool="${escapeHtml(t.name)}"
+          onchange="updateToolDraft(this.dataset.tool, !this.checked)" />
+        <button type="button" class="tool-name-btn" onclick="toggleToolDesc('${id}')">
+          <span class="chev">▶</span>
+          <span>${escapeHtml(t.name)}</span>
+        </button>
+      </div>
+      <div class="tool-detail" hidden>
+        <div class="tool-desc ${desc ? "" : "empty"}">${desc ? escapeHtml(desc) : "(no description)"}</div>
+        ${argsHtml}
+      </div>
+    </div>
+  `;
+  }).join("");
   openModal(`
     <div class="modal">
       <div class="modal-head">
@@ -754,6 +808,49 @@ async function openServerTools(serverName) {
       </div>
     </div>
   `);
+}
+
+function toggleToolDesc(id) {
+  const item = $(id);
+  if (!item) return;
+  const detail = item.querySelector(".tool-detail");
+  if (!detail) return;
+  const open = !detail.hidden;
+  detail.hidden = open;
+  item.classList.toggle("open", !open);
+}
+
+function _schemaTypeLabel(s) {
+  if (!s || typeof s !== "object") return "any";
+  if (Array.isArray(s.type)) return s.type.join("|");
+  if (s.type === "array") {
+    const it = s.items;
+    if (it && it.type) return `${it.type}[]`;
+    return "array";
+  }
+  if (s.type) return String(s.type);
+  if (s.enum) return `enum(${s.enum.length})`;
+  if (s.anyOf || s.oneOf) return "union";
+  return "any";
+}
+
+function renderToolArgs(schema) {
+  const props = schema && typeof schema === "object" ? schema.properties : null;
+  if (!props || typeof props !== "object" || !Object.keys(props).length) return "";
+  const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+  const rows = Object.entries(props).map(([name, spec]) => {
+    const type = _schemaTypeLabel(spec);
+    const desc = (spec && (spec.description || spec.title)) || "";
+    const req = required.has(name) ? '<span class="req" title="required">*</span>' : "";
+    return `
+      <div class="tool-arg">
+        <span class="a-name">${escapeHtml(name)}${req}</span>
+        <span class="a-type">${escapeHtml(type)}</span>
+        <span class="a-desc">${desc ? escapeHtml(desc) : ""}</span>
+      </div>
+    `;
+  }).join("");
+  return `<div class="tool-args"><div class="tool-args-label">Arguments</div>${rows}</div>`;
 }
 
 function updateToolDraft(toolName, disabled) {
@@ -826,7 +923,7 @@ function buildServerModal({ mode, server }) {
         ` : ""}
         <div id="pane-preset" ${mode === "edit" ? "hidden" : ""}>
           <div class="preset-list">
-            ${STATE.predefined.map(p => `
+            ${STATE.templates.map(p => `
               <div class="preset" onclick='applyPreset(${JSON.stringify(p.name)})'>
                 <div class="label">${escapeHtml(p.name)}</div>
                 <div class="desc">${escapeHtml(p.description || "")}</div>
@@ -904,7 +1001,7 @@ function onTypeChange() {
 }
 
 function applyPreset(name) {
-  const p = STATE.predefined.find(x => x.name === name);
+  const p = STATE.templates.find(x => x.name === name);
   if (!p) return;
   // Spec is the entry minus name + description.
   const { name: _n, description: _d, ...spec } = p;

@@ -1,4 +1,4 @@
-"""Loader for the user-editable predefined catalog (`predefined.json`).
+"""Loader for the user-editable templates catalog (`templates.json`).
 
 The file mirrors the standard mcp.json shape::
 
@@ -21,23 +21,23 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def load_predefined(path: Path) -> list[dict]:
+def load_templates(path: Path) -> list[dict]:
     if not path.exists():
         return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        logger.warning("predefined.json is invalid JSON: %s", e)
+        logger.warning("templates.json is invalid JSON: %s", e)
         return []
     if not isinstance(data, dict):
         logger.warning(
-            "predefined.json must be a JSON object with `mcpServers`, got %s",
+            "templates.json must be a JSON object with `mcpServers`, got %s",
             type(data).__name__,
         )
         return []
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
-        logger.warning("predefined.json: `mcpServers` must be an object")
+        logger.warning("templates.json: `mcpServers` must be an object")
         return []
     out: list[dict] = []
     for name, spec in servers.items():
